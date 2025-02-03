@@ -1,0 +1,559 @@
+"statecode","countycode","race","county_value","GEOID","NAME","sum_of_tracts","diff"
+"36","001","White Alone",217654,"36001","Albany County, New York",217654,0
+"36","001","Black Alone",35054,"36001","Albany County, New York",35054,0
+"36","001","AIAN Alone",125,"36001","Albany County, New York",125,0
+"36","001","Asian Alone",21435,"36001","Albany County, New York",21435,0
+"36","001","NHOPI Alone",179,"36001","Albany County, New York",179,0
+"36","001","Other",6564,"36001","Albany County, New York",6564,0
+"36","001","Two or More",16180,"36001","Albany County, New York",16180,0
+"36","001","Non Hispanic White",213360,"36001","Albany County, New York",213360,0
+"36","001","Hispanic",15228,"36001","Albany County, New York",15228,0
+"36","003","White Alone",40958,"36003","Allegany County, New York",40958,0
+"36","003","Black Alone",122,"36003","Allegany County, New York",122,0
+"36","003","AIAN Alone",27,"36003","Allegany County, New York",27,0
+"36","003","Asian Alone",274,"36003","Allegany County, New York",274,0
+"36","003","NHOPI Alone",0,"36003","Allegany County, New York",0,0
+"36","003","Other",36,"36003","Allegany County, New York",36,0
+"36","003","Two or More",961,"36003","Allegany County, New York",961,0
+"36","003","Non Hispanic White",40700,"36003","Allegany County, New York",40700,0
+"36","003","Hispanic",546,"36003","Allegany County, New York",546,0
+"36","005","White Alone",214991,"36005","Bronx County, New York",214991,0
+"36","005","Black Alone",456857,"36005","Bronx County, New York",456857,0
+"36","005","AIAN Alone",17359,"36005","Bronx County, New York",17359,0
+"36","005","Asian Alone",57985,"36005","Bronx County, New York",57985,0
+"36","005","NHOPI Alone",1902,"36005","Bronx County, New York",1902,0
+"36","005","Other",441362,"36005","Bronx County, New York",441362,0
+"36","005","Two or More",174161,"36005","Bronx County, New York",174161,0
+"36","005","Non Hispanic White",118496,"36005","Bronx County, New York",118496,0
+"36","005","Hispanic",757754,"36005","Bronx County, New York",757754,0
+"36","007","White Alone",157265,"36007","Broome County, New York",157265,0
+"36","007","Black Alone",9725,"36007","Broome County, New York",9725,0
+"36","007","AIAN Alone",452,"36007","Broome County, New York",452,0
+"36","007","Asian Alone",8563,"36007","Broome County, New York",8563,0
+"36","007","NHOPI Alone",62,"36007","Broome County, New York",62,0
+"36","007","Other",3066,"36007","Broome County, New York",3066,0
+"36","007","Two or More",7687,"36007","Broome County, New York",7687,0
+"36","007","Non Hispanic White",155663,"36007","Broome County, New York",155663,0
+"36","007","Hispanic",7511,"36007","Broome County, New York",7511,0
+"36","009","White Alone",66852,"36009","Cattaraugus County, New York",66852,0
+"36","009","Black Alone",647,"36009","Cattaraugus County, New York",647,0
+"36","009","AIAN Alone",2151,"36009","Cattaraugus County, New York",2151,0
+"36","009","Asian Alone",439,"36009","Cattaraugus County, New York",439,0
+"36","009","NHOPI Alone",0,"36009","Cattaraugus County, New York",0,0
+"36","009","Other",482,"36009","Cattaraugus County, New York",482,0
+"36","009","Two or More",3074,"36009","Cattaraugus County, New York",3074,0
+"36","009","Non Hispanic White",66460,"36009","Cattaraugus County, New York",66460,0
+"36","009","Hispanic",996,"36009","Cattaraugus County, New York",996,0
+"36","011","White Alone",66630,"36011","Cayuga County, New York",66630,0
+"36","011","Black Alone",792,"36011","Cayuga County, New York",792,0
+"36","011","AIAN Alone",78,"36011","Cayuga County, New York",78,0
+"36","011","Asian Alone",410,"36011","Cayuga County, New York",410,0
+"36","011","NHOPI Alone",0,"36011","Cayuga County, New York",0,0
+"36","011","Other",1052,"36011","Cayuga County, New York",1052,0
+"36","011","Two or More",2923,"36011","Cayuga County, New York",2923,0
+"36","011","Non Hispanic White",66306,"36011","Cayuga County, New York",66306,0
+"36","011","Hispanic",1337,"36011","Cayuga County, New York",1337,0
+"36","013","White Alone",108315,"36013","Chautauqua County, New York",108315,0
+"36","013","Black Alone",2081,"36013","Chautauqua County, New York",2081,0
+"36","013","AIAN Alone",414,"36013","Chautauqua County, New York",414,0
+"36","013","Asian Alone",596,"36013","Chautauqua County, New York",596,0
+"36","013","NHOPI Alone",70,"36013","Chautauqua County, New York",70,0
+"36","013","Other",4258,"36013","Chautauqua County, New York",4258,0
+"36","013","Two or More",5630,"36013","Chautauqua County, New York",5630,0
+"36","013","Non Hispanic White",105832,"36013","Chautauqua County, New York",105832,0
+"36","013","Hispanic",9304,"36013","Chautauqua County, New York",9304,0
+"36","015","White Alone",70326,"36015","Chemung County, New York",70326,0
+"36","015","Black Alone",3427,"36015","Chemung County, New York",3427,0
+"36","015","AIAN Alone",44,"36015","Chemung County, New York",44,0
+"36","015","Asian Alone",1161,"36015","Chemung County, New York",1161,0
+"36","015","NHOPI Alone",0,"36015","Chemung County, New York",0,0
+"36","015","Other",530,"36015","Chemung County, New York",530,0
+"36","015","Two or More",3642,"36015","Chemung County, New York",3642,0
+"36","015","Non Hispanic White",69615,"36015","Chemung County, New York",69615,0
+"36","015","Hispanic",2027,"36015","Chemung County, New York",2027,0
+"36","017","White Alone",42975,"36017","Chenango County, New York",42975,0
+"36","017","Black Alone",83,"36017","Chenango County, New York",83,0
+"36","017","AIAN Alone",55,"36017","Chenango County, New York",55,0
+"36","017","Asian Alone",159,"36017","Chenango County, New York",159,0
+"36","017","NHOPI Alone",0,"36017","Chenango County, New York",0,0
+"36","017","Other",718,"36017","Chenango County, New York",718,0
+"36","017","Two or More",1989,"36017","Chenango County, New York",1989,0
+"36","017","Non Hispanic White",42736,"36017","Chenango County, New York",42736,0
+"36","017","Hispanic",854,"36017","Chenango County, New York",854,0
+"36","019","White Alone",68599,"36019","Clinton County, New York",68599,0
+"36","019","Black Alone",676,"36019","Clinton County, New York",676,0
+"36","019","AIAN Alone",146,"36019","Clinton County, New York",146,0
+"36","019","Asian Alone",782,"36019","Clinton County, New York",782,0
+"36","019","NHOPI Alone",35,"36019","Clinton County, New York",35,0
+"36","019","Other",346,"36019","Clinton County, New York",346,0
+"36","019","Two or More",2276,"36019","Clinton County, New York",2276,0
+"36","019","Non Hispanic White",68274,"36019","Clinton County, New York",68274,0
+"36","019","Hispanic",993,"36019","Clinton County, New York",993,0
+"36","021","White Alone",51499,"36021","Columbia County, New York",51499,0
+"36","021","Black Alone",1449,"36021","Columbia County, New York",1449,0
+"36","021","AIAN Alone",87,"36021","Columbia County, New York",87,0
+"36","021","Asian Alone",1352,"36021","Columbia County, New York",1352,0
+"36","021","NHOPI Alone",0,"36021","Columbia County, New York",0,0
+"36","021","Other",1425,"36021","Columbia County, New York",1425,0
+"36","021","Two or More",3313,"36021","Columbia County, New York",3313,0
+"36","021","Non Hispanic White",51084,"36021","Columbia County, New York",51084,0
+"36","021","Hispanic",2664,"36021","Columbia County, New York",2664,0
+"36","023","White Alone",39414,"36023","Cortland County, New York",39414,0
+"36","023","Black Alone",506,"36023","Cortland County, New York",506,0
+"36","023","AIAN Alone",67,"36023","Cortland County, New York",67,0
+"36","023","Asian Alone",317,"36023","Cortland County, New York",317,0
+"36","023","NHOPI Alone",8,"36023","Cortland County, New York",8,0
+"36","023","Other",479,"36023","Cortland County, New York",479,0
+"36","023","Two or More",2054,"36023","Cortland County, New York",2054,0
+"36","023","Non Hispanic White",39151,"36023","Cortland County, New York",39151,0
+"36","023","Hispanic",1234,"36023","Cortland County, New York",1234,0
+"36","025","White Alone",39113,"36025","Delaware County, New York",39113,0
+"36","025","Black Alone",427,"36025","Delaware County, New York",427,0
+"36","025","AIAN Alone",276,"36025","Delaware County, New York",276,0
+"36","025","Asian Alone",322,"36025","Delaware County, New York",322,0
+"36","025","NHOPI Alone",0,"36025","Delaware County, New York",0,0
+"36","025","Other",257,"36025","Delaware County, New York",257,0
+"36","025","Two or More",1954,"36025","Delaware County, New York",1954,0
+"36","025","Non Hispanic White",38789,"36025","Delaware County, New York",38789,0
+"36","025","Hispanic",1568,"36025","Delaware County, New York",1568,0
+"36","027","White Alone",208678,"36027","Dutchess County, New York",208678,0
+"36","027","Black Alone",25286,"36027","Dutchess County, New York",25286,0
+"36","027","AIAN Alone",1489,"36027","Dutchess County, New York",1489,0
+"36","027","Asian Alone",8695,"36027","Dutchess County, New York",8695,0
+"36","027","NHOPI Alone",40,"36027","Dutchess County, New York",40,0
+"36","027","Other",14608,"36027","Dutchess County, New York",14608,0
+"36","027","Two or More",20802,"36027","Dutchess County, New York",20802,0
+"36","027","Non Hispanic White",199444,"36027","Dutchess County, New York",199444,0
+"36","027","Hispanic",36211,"36027","Dutchess County, New York",36211,0
+"36","029","White Alone",711350,"36029","Erie County, New York",711350,0
+"36","029","Black Alone",111617,"36029","Erie County, New York",111617,0
+"36","029","AIAN Alone",4315,"36029","Erie County, New York",4315,0
+"36","029","Asian Alone",41255,"36029","Erie County, New York",41255,0
+"36","029","NHOPI Alone",138,"36029","Erie County, New York",138,0
+"36","029","Other",22139,"36029","Erie County, New York",22139,0
+"36","029","Two or More",33832,"36029","Erie County, New York",33832,0
+"36","029","Non Hispanic White",697874,"36029","Erie County, New York",697874,0
+"36","029","Hispanic",48517,"36029","Erie County, New York",48517,0
+"36","031","White Alone",33066,"36031","Essex County, New York",33066,0
+"36","031","Black Alone",14,"36031","Essex County, New York",14,0
+"36","031","AIAN Alone",27,"36031","Essex County, New York",27,0
+"36","031","Asian Alone",58,"36031","Essex County, New York",58,0
+"36","031","NHOPI Alone",0,"36031","Essex County, New York",0,0
+"36","031","Other",271,"36031","Essex County, New York",271,0
+"36","031","Two or More",1493,"36031","Essex County, New York",1493,0
+"36","031","Non Hispanic White",32930,"36031","Essex County, New York",32930,0
+"36","031","Hispanic",407,"36031","Essex County, New York",407,0
+"36","033","White Alone",38393,"36033","Franklin County, New York",38393,0
+"36","033","Black Alone",111,"36033","Franklin County, New York",111,0
+"36","033","AIAN Alone",3245,"36033","Franklin County, New York",3245,0
+"36","033","Asian Alone",201,"36033","Franklin County, New York",201,0
+"36","033","NHOPI Alone",0,"36033","Franklin County, New York",0,0
+"36","033","Other",188,"36033","Franklin County, New York",188,0
+"36","033","Two or More",1002,"36033","Franklin County, New York",1002,0
+"36","033","Non Hispanic White",38245,"36033","Franklin County, New York",38245,0
+"36","033","Hispanic",240,"36033","Franklin County, New York",240,0
+"36","035","White Alone",47400,"36035","Fulton County, New York",47400,0
+"36","035","Black Alone",396,"36035","Fulton County, New York",396,0
+"36","035","AIAN Alone",0,"36035","Fulton County, New York",0,0
+"36","035","Asian Alone",311,"36035","Fulton County, New York",311,0
+"36","035","NHOPI Alone",0,"36035","Fulton County, New York",0,0
+"36","035","Other",634,"36035","Fulton County, New York",634,0
+"36","035","Two or More",2677,"36035","Fulton County, New York",2677,0
+"36","035","Non Hispanic White",46701,"36035","Fulton County, New York",46701,0
+"36","035","Hispanic",1936,"36035","Fulton County, New York",1936,0
+"36","037","White Alone",52203,"36037","Genesee County, New York",52203,0
+"36","037","Black Alone",739,"36037","Genesee County, New York",739,0
+"36","037","AIAN Alone",267,"36037","Genesee County, New York",267,0
+"36","037","Asian Alone",352,"36037","Genesee County, New York",352,0
+"36","037","NHOPI Alone",0,"36037","Genesee County, New York",0,0
+"36","037","Other",420,"36037","Genesee County, New York",420,0
+"36","037","Two or More",2712,"36037","Genesee County, New York",2712,0
+"36","037","Non Hispanic White",51884,"36037","Genesee County, New York",51884,0
+"36","037","Hispanic",1730,"36037","Genesee County, New York",1730,0
+"36","039","White Alone",40627,"36039","Greene County, New York",40627,0
+"36","039","Black Alone",787,"36039","Greene County, New York",787,0
+"36","039","AIAN Alone",0,"36039","Greene County, New York",0,0
+"36","039","Asian Alone",376,"36039","Greene County, New York",376,0
+"36","039","NHOPI Alone",0,"36039","Greene County, New York",0,0
+"36","039","Other",948,"36039","Greene County, New York",948,0
+"36","039","Two or More",1999,"36039","Greene County, New York",1999,0
+"36","039","Non Hispanic White",40003,"36039","Greene County, New York",40003,0
+"36","039","Hispanic",2069,"36039","Greene County, New York",2069,0
+"36","041","White Alone",4609,"36041","Hamilton County, New York",4609,0
+"36","041","Black Alone",4,"36041","Hamilton County, New York",4,0
+"36","041","AIAN Alone",0,"36041","Hamilton County, New York",0,0
+"36","041","Asian Alone",20,"36041","Hamilton County, New York",20,0
+"36","041","NHOPI Alone",0,"36041","Hamilton County, New York",0,0
+"36","041","Other",26,"36041","Hamilton County, New York",26,0
+"36","041","Two or More",241,"36041","Hamilton County, New York",241,0
+"36","041","Non Hispanic White",4596,"36041","Hamilton County, New York",4596,0
+"36","041","Hispanic",25,"36041","Hamilton County, New York",25,0
+"36","043","White Alone",54957,"36043","Herkimer County, New York",54957,0
+"36","043","Black Alone",296,"36043","Herkimer County, New York",296,0
+"36","043","AIAN Alone",34,"36043","Herkimer County, New York",34,0
+"36","043","Asian Alone",436,"36043","Herkimer County, New York",436,0
+"36","043","NHOPI Alone",60,"36043","Herkimer County, New York",60,0
+"36","043","Other",449,"36043","Herkimer County, New York",449,0
+"36","043","Two or More",2428,"36043","Herkimer County, New York",2428,0
+"36","043","Non Hispanic White",54363,"36043","Herkimer County, New York",54363,0
+"36","043","Hispanic",1296,"36043","Herkimer County, New York",1296,0
+"36","045","White Alone",96199,"36045","Jefferson County, New York",96199,0
+"36","045","Black Alone",4117,"36045","Jefferson County, New York",4117,0
+"36","045","AIAN Alone",546,"36045","Jefferson County, New York",546,0
+"36","045","Asian Alone",1736,"36045","Jefferson County, New York",1736,0
+"36","045","NHOPI Alone",194,"36045","Jefferson County, New York",194,0
+"36","045","Other",1915,"36045","Jefferson County, New York",1915,0
+"36","045","Two or More",6519,"36045","Jefferson County, New York",6519,0
+"36","045","Non Hispanic White",93429,"36045","Jefferson County, New York",93429,0
+"36","045","Hispanic",7333,"36045","Jefferson County, New York",7333,0
+"36","047","White Alone",1053243,"36047","Kings County, New York",1053243,0
+"36","047","Black Alone",736472,"36047","Kings County, New York",736472,0
+"36","047","AIAN Alone",15586,"36047","Kings County, New York",15586,0
+"36","047","Asian Alone",324014,"36047","Kings County, New York",324014,0
+"36","047","NHOPI Alone",758,"36047","Kings County, New York",758,0
+"36","047","Other",266676,"36047","Kings County, New York",266676,0
+"36","047","Two or More",202334,"36047","Kings County, New York",202334,0
+"36","047","Non Hispanic White",976714,"36047","Kings County, New York",976714,0
+"36","047","Hispanic",470837,"36047","Kings County, New York",470837,0
+"36","049","White Alone",25138,"36049","Lewis County, New York",25138,0
+"36","049","Black Alone",33,"36049","Lewis County, New York",33,0
+"36","049","AIAN Alone",29,"36049","Lewis County, New York",29,0
+"36","049","Asian Alone",61,"36049","Lewis County, New York",61,0
+"36","049","NHOPI Alone",0,"36049","Lewis County, New York",0,0
+"36","049","Other",249,"36049","Lewis County, New York",249,0
+"36","049","Two or More",739,"36049","Lewis County, New York",739,0
+"36","049","Non Hispanic White",25022,"36049","Lewis County, New York",25022,0
+"36","049","Hispanic",397,"36049","Lewis County, New York",397,0
+"36","051","White Alone",52372,"36051","Livingston County, New York",52372,0
+"36","051","Black Alone",476,"36051","Livingston County, New York",476,0
+"36","051","AIAN Alone",31,"36051","Livingston County, New York",31,0
+"36","051","Asian Alone",442,"36051","Livingston County, New York",442,0
+"36","051","NHOPI Alone",0,"36051","Livingston County, New York",0,0
+"36","051","Other",603,"36051","Livingston County, New York",603,0
+"36","051","Two or More",2747,"36051","Livingston County, New York",2747,0
+"36","051","Non Hispanic White",51973,"36051","Livingston County, New York",51973,0
+"36","051","Hispanic",1710,"36051","Livingston County, New York",1710,0
+"36","053","White Alone",58356,"36053","Madison County, New York",58356,0
+"36","053","Black Alone",441,"36053","Madison County, New York",441,0
+"36","053","AIAN Alone",163,"36053","Madison County, New York",163,0
+"36","053","Asian Alone",207,"36053","Madison County, New York",207,0
+"36","053","NHOPI Alone",0,"36053","Madison County, New York",0,0
+"36","053","Other",395,"36053","Madison County, New York",395,0
+"36","053","Two or More",2327,"36053","Madison County, New York",2327,0
+"36","053","Non Hispanic White",58088,"36053","Madison County, New York",58088,0
+"36","053","Hispanic",838,"36053","Madison County, New York",838,0
+"36","055","White Alone",530285,"36055","Monroe County, New York",530285,0
+"36","055","Black Alone",104525,"36055","Monroe County, New York",104525,0
+"36","055","AIAN Alone",1893,"36055","Monroe County, New York",1893,0
+"36","055","Asian Alone",26004,"36055","Monroe County, New York",26004,0
+"36","055","NHOPI Alone",483,"36055","Monroe County, New York",483,0
+"36","055","Other",24749,"36055","Monroe County, New York",24749,0
+"36","055","Two or More",38599,"36055","Monroe County, New York",38599,0
+"36","055","Non Hispanic White",511818,"36055","Monroe County, New York",511818,0
+"36","055","Hispanic",63319,"36055","Monroe County, New York",63319,0
+"36","057","White Alone",40167,"36057","Montgomery County, New York",40167,0
+"36","057","Black Alone",1336,"36057","Montgomery County, New York",1336,0
+"36","057","AIAN Alone",169,"36057","Montgomery County, New York",169,0
+"36","057","Asian Alone",324,"36057","Montgomery County, New York",324,0
+"36","057","NHOPI Alone",18,"36057","Montgomery County, New York",18,0
+"36","057","Other",3152,"36057","Montgomery County, New York",3152,0
+"36","057","Two or More",3178,"36057","Montgomery County, New York",3178,0
+"36","057","Non Hispanic White",38875,"36057","Montgomery County, New York",38875,0
+"36","057","Hispanic",6246,"36057","Montgomery County, New York",6246,0
+"36","059","White Alone",829418,"36059","Nassau County, New York",829418,0
+"36","059","Black Alone",152033,"36059","Nassau County, New York",152033,0
+"36","059","AIAN Alone",2941,"36059","Nassau County, New York",2941,0
+"36","059","Asian Alone",162761,"36059","Nassau County, New York",162761,0
+"36","059","NHOPI Alone",277,"36059","Nassau County, New York",277,0
+"36","059","Other",116643,"36059","Nassau County, New York",116643,0
+"36","059","Two or More",104551,"36059","Nassau County, New York",104551,0
+"36","059","Non Hispanic White",780252,"36059","Nassau County, New York",780252,0
+"36","059","Hispanic",236453,"36059","Nassau County, New York",236453,0
+"36","061","White Alone",824391,"36061","New York County, New York",824391,0
+"36","061","Black Alone",200778,"36061","New York County, New York",200778,0
+"36","061","AIAN Alone",7152,"36061","New York County, New York",7152,0
+"36","061","Asian Alone",188814,"36061","New York County, New York",188814,0
+"36","061","NHOPI Alone",736,"36061","New York County, New York",736,0
+"36","061","Other",183916,"36061","New York County, New York",183916,0
+"36","061","Two or More",150079,"36061","New York County, New York",150079,0
+"36","061","Non Hispanic White",758228,"36061","New York County, New York",758228,0
+"36","061","Hispanic",372807,"36061","New York County, New York",372807,0
+"36","063","White Alone",179650,"36063","Niagara County, New York",179650,0
+"36","063","Black Alone",12736,"36063","Niagara County, New York",12736,0
+"36","063","AIAN Alone",1134,"36063","Niagara County, New York",1134,0
+"36","063","Asian Alone",2577,"36063","Niagara County, New York",2577,0
+"36","063","NHOPI Alone",0,"36063","Niagara County, New York",0,0
+"36","063","Other",2607,"36063","Niagara County, New York",2607,0
+"36","063","Two or More",8469,"36063","Niagara County, New York",8469,0
+"36","063","Non Hispanic White",178469,"36063","Niagara County, New York",178469,0
+"36","063","Hispanic",5717,"36063","Niagara County, New York",5717,0
+"36","065","White Alone",182133,"36065","Oneida County, New York",182133,0
+"36","065","Black Alone",10299,"36065","Oneida County, New York",10299,0
+"36","065","AIAN Alone",277,"36065","Oneida County, New York",277,0
+"36","065","Asian Alone",9248,"36065","Oneida County, New York",9248,0
+"36","065","NHOPI Alone",115,"36065","Oneida County, New York",115,0
+"36","065","Other",4404,"36065","Oneida County, New York",4404,0
+"36","065","Two or More",11605,"36065","Oneida County, New York",11605,0
+"36","065","Non Hispanic White",178222,"36065","Oneida County, New York",178222,0
+"36","065","Hispanic",12226,"36065","Oneida County, New York",12226,0
+"36","067","White Alone",354221,"36067","Onondaga County, New York",354221,0
+"36","067","Black Alone",47063,"36067","Onondaga County, New York",47063,0
+"36","067","AIAN Alone",2439,"36067","Onondaga County, New York",2439,0
+"36","067","Asian Alone",16245,"36067","Onondaga County, New York",16245,0
+"36","067","NHOPI Alone",293,"36067","Onondaga County, New York",293,0
+"36","067","Other",7428,"36067","Onondaga County, New York",7428,0
+"36","067","Two or More",22746,"36067","Onondaga County, New York",22746,0
+"36","067","Non Hispanic White",349105,"36067","Onondaga County, New York",349105,0
+"36","067","Hispanic",21895,"36067","Onondaga County, New York",21895,0
+"36","069","White Alone",99265,"36069","Ontario County, New York",99265,0
+"36","069","Black Alone",1749,"36069","Ontario County, New York",1749,0
+"36","069","AIAN Alone",34,"36069","Ontario County, New York",34,0
+"36","069","Asian Alone",1450,"36069","Ontario County, New York",1450,0
+"36","069","NHOPI Alone",0,"36069","Ontario County, New York",0,0
+"36","069","Other",1634,"36069","Ontario County, New York",1634,0
+"36","069","Two or More",4296,"36069","Ontario County, New York",4296,0
+"36","069","Non Hispanic White",97313,"36069","Ontario County, New York",97313,0
+"36","069","Hispanic",4922,"36069","Ontario County, New York",4922,0
+"36","071","White Alone",261720,"36071","Orange County, New York",261720,0
+"36","071","Black Alone",44786,"36071","Orange County, New York",44786,0
+"36","071","AIAN Alone",4367,"36071","Orange County, New York",4367,0
+"36","071","Asian Alone",11473,"36071","Orange County, New York",11473,0
+"36","071","NHOPI Alone",125,"36071","Orange County, New York",125,0
+"36","071","Other",36425,"36071","Orange County, New York",36425,0
+"36","071","Two or More",33668,"36071","Orange County, New York",33668,0
+"36","071","Non Hispanic White",242519,"36071","Orange County, New York",242519,0
+"36","071","Hispanic",84895,"36071","Orange County, New York",84895,0
+"36","073","White Alone",34674,"36073","Orleans County, New York",34674,0
+"36","073","Black Alone",806,"36073","Orleans County, New York",806,0
+"36","073","AIAN Alone",107,"36073","Orleans County, New York",107,0
+"36","073","Asian Alone",186,"36073","Orleans County, New York",186,0
+"36","073","NHOPI Alone",0,"36073","Orleans County, New York",0,0
+"36","073","Other",679,"36073","Orleans County, New York",679,0
+"36","073","Two or More",1004,"36073","Orleans County, New York",1004,0
+"36","073","Non Hispanic White",34212,"36073","Orleans County, New York",34212,0
+"36","073","Hispanic",1375,"36073","Orleans County, New York",1375,0
+"36","075","White Alone",107406,"36075","Oswego County, New York",107406,0
+"36","075","Black Alone",444,"36075","Oswego County, New York",444,0
+"36","075","AIAN Alone",199,"36075","Oswego County, New York",199,0
+"36","075","Asian Alone",681,"36075","Oswego County, New York",681,0
+"36","075","NHOPI Alone",0,"36075","Oswego County, New York",0,0
+"36","075","Other",915,"36075","Oswego County, New York",915,0
+"36","075","Two or More",3579,"36075","Oswego County, New York",3579,0
+"36","075","Non Hispanic White",106678,"36075","Oswego County, New York",106678,0
+"36","075","Hispanic",1808,"36075","Oswego County, New York",1808,0
+"36","077","White Alone",50648,"36077","Otsego County, New York",50648,0
+"36","077","Black Alone",467,"36077","Otsego County, New York",467,0
+"36","077","AIAN Alone",90,"36077","Otsego County, New York",90,0
+"36","077","Asian Alone",799,"36077","Otsego County, New York",799,0
+"36","077","NHOPI Alone",53,"36077","Otsego County, New York",53,0
+"36","077","Other",472,"36077","Otsego County, New York",472,0
+"36","077","Two or More",1667,"36077","Otsego County, New York",1667,0
+"36","077","Non Hispanic White",50098,"36077","Otsego County, New York",50098,0
+"36","077","Hispanic",1451,"36077","Otsego County, New York",1451,0
+"36","079","White Alone",75275,"36079","Putnam County, New York",75275,0
+"36","079","Black Alone",2355,"36079","Putnam County, New York",2355,0
+"36","079","AIAN Alone",160,"36079","Putnam County, New York",160,0
+"36","079","Asian Alone",2120,"36079","Putnam County, New York",2120,0
+"36","079","NHOPI Alone",30,"36079","Putnam County, New York",30,0
+"36","079","Other",8892,"36079","Putnam County, New York",8892,0
+"36","079","Two or More",6489,"36079","Putnam County, New York",6489,0
+"36","079","Non Hispanic White",71125,"36079","Putnam County, New York",71125,0
+"36","079","Hispanic",17012,"36079","Putnam County, New York",17012,0
+"36","081","White Alone",663622,"36081","Queens County, New York",663622,0
+"36","081","Black Alone",387234,"36081","Queens County, New York",387234,0
+"36","081","AIAN Alone",15917,"36081","Queens County, New York",15917,0
+"36","081","Asian Alone",611012,"36081","Queens County, New York",611012,0
+"36","081","NHOPI Alone",1583,"36081","Queens County, New York",1583,0
+"36","081","Other",374243,"36081","Queens County, New York",374243,0
+"36","081","Two or More",243562,"36081","Queens County, New York",243562,0
+"36","081","Non Hispanic White",559663,"36081","Queens County, New York",559663,0
+"36","081","Hispanic",626353,"36081","Queens County, New York",626353,0
+"36","083","White Alone",130155,"36083","Rensselaer County, New York",130155,0
+"36","083","Black Alone",9537,"36083","Rensselaer County, New York",9537,0
+"36","083","AIAN Alone",217,"36083","Rensselaer County, New York",217,0
+"36","083","Asian Alone",3961,"36083","Rensselaer County, New York",3961,0
+"36","083","NHOPI Alone",12,"36083","Rensselaer County, New York",12,0
+"36","083","Other",2961,"36083","Rensselaer County, New York",2961,0
+"36","083","Two or More",7019,"36083","Rensselaer County, New York",7019,0
+"36","083","Non Hispanic White",128230,"36083","Rensselaer County, New York",128230,0
+"36","083","Hispanic",7798,"36083","Rensselaer County, New York",7798,0
+"36","085","White Alone",313597,"36085","Richmond County, New York",313597,0
+"36","085","Black Alone",46130,"36085","Richmond County, New York",46130,0
+"36","085","AIAN Alone",2520,"36085","Richmond County, New York",2520,0
+"36","085","Asian Alone",61137,"36085","Richmond County, New York",61137,0
+"36","085","NHOPI Alone",133,"36085","Richmond County, New York",133,0
+"36","085","Other",25000,"36085","Richmond County, New York",25000,0
+"36","085","Two or More",37052,"36085","Richmond County, New York",37052,0
+"36","085","Non Hispanic White",285140,"36085","Richmond County, New York",285140,0
+"36","085","Hispanic",87254,"36085","Richmond County, New York",87254,0
+"36","087","White Alone",218559,"36087","Rockland County, New York",218559,0
+"36","087","Black Alone",35486,"36087","Rockland County, New York",35486,0
+"36","087","AIAN Alone",1594,"36087","Rockland County, New York",1594,0
+"36","087","Asian Alone",19840,"36087","Rockland County, New York",19840,0
+"36","087","NHOPI Alone",27,"36087","Rockland County, New York",27,0
+"36","087","Other",32444,"36087","Rockland County, New York",32444,0
+"36","087","Two or More",24154,"36087","Rockland County, New York",24154,0
+"36","087","Non Hispanic White",208024,"36087","Rockland County, New York",208024,0
+"36","087","Hispanic",62447,"36087","Rockland County, New York",62447,0
+"36","089","White Alone",92975,"36089","St. Lawrence County, New York",92975,0
+"36","089","Black Alone",124,"36089","St. Lawrence County, New York",124,0
+"36","089","AIAN Alone",327,"36089","St. Lawrence County, New York",327,0
+"36","089","Asian Alone",561,"36089","St. Lawrence County, New York",561,0
+"36","089","NHOPI Alone",5,"36089","St. Lawrence County, New York",5,0
+"36","089","Other",186,"36089","St. Lawrence County, New York",186,0
+"36","089","Two or More",3138,"36089","St. Lawrence County, New York",3138,0
+"36","089","Non Hispanic White",92516,"36089","St. Lawrence County, New York",92516,0
+"36","089","Hispanic",1080,"36089","St. Lawrence County, New York",1080,0
+"36","091","White Alone",212525,"36091","Saratoga County, New York",212525,0
+"36","091","Black Alone",3340,"36091","Saratoga County, New York",3340,0
+"36","091","AIAN Alone",395,"36091","Saratoga County, New York",395,0
+"36","091","Asian Alone",6931,"36091","Saratoga County, New York",6931,0
+"36","091","NHOPI Alone",101,"36091","Saratoga County, New York",101,0
+"36","091","Other",2129,"36091","Saratoga County, New York",2129,0
+"36","091","Two or More",7835,"36091","Saratoga County, New York",7835,0
+"36","091","Non Hispanic White",209611,"36091","Saratoga County, New York",209611,0
+"36","091","Hispanic",6270,"36091","Saratoga County, New York",6270,0
+"36","093","White Alone",113245,"36093","Schenectady County, New York",113245,0
+"36","093","Black Alone",16436,"36093","Schenectady County, New York",16436,0
+"36","093","AIAN Alone",1000,"36093","Schenectady County, New York",1000,0
+"36","093","Asian Alone",7823,"36093","Schenectady County, New York",7823,0
+"36","093","NHOPI Alone",28,"36093","Schenectady County, New York",28,0
+"36","093","Other",6253,"36093","Schenectady County, New York",6253,0
+"36","093","Two or More",9844,"36093","Schenectady County, New York",9844,0
+"36","093","Non Hispanic White",111178,"36093","Schenectady County, New York",111178,0
+"36","093","Hispanic",9994,"36093","Schenectady County, New York",9994,0
+"36","095","White Alone",26662,"36095","Schoharie County, New York",26662,0
+"36","095","Black Alone",172,"36095","Schoharie County, New York",172,0
+"36","095","AIAN Alone",19,"36095","Schoharie County, New York",19,0
+"36","095","Asian Alone",141,"36095","Schoharie County, New York",141,0
+"36","095","NHOPI Alone",0,"36095","Schoharie County, New York",0,0
+"36","095","Other",291,"36095","Schoharie County, New York",291,0
+"36","095","Two or More",1428,"36095","Schoharie County, New York",1428,0
+"36","095","Non Hispanic White",26412,"36095","Schoharie County, New York",26412,0
+"36","095","Hispanic",789,"36095","Schoharie County, New York",789,0
+"36","097","White Alone",16647,"36097","Schuyler County, New York",16647,0
+"36","097","Black Alone",125,"36097","Schuyler County, New York",125,0
+"36","097","AIAN Alone",10,"36097","Schuyler County, New York",10,0
+"36","097","Asian Alone",102,"36097","Schuyler County, New York",102,0
+"36","097","NHOPI Alone",0,"36097","Schuyler County, New York",0,0
+"36","097","Other",35,"36097","Schuyler County, New York",35,0
+"36","097","Two or More",575,"36097","Schuyler County, New York",575,0
+"36","097","Non Hispanic White",16610,"36097","Schuyler County, New York",16610,0
+"36","097","Hispanic",128,"36097","Schuyler County, New York",128,0
+"36","099","White Alone",29143,"36099","Seneca County, New York",29143,0
+"36","099","Black Alone",472,"36099","Seneca County, New York",472,0
+"36","099","AIAN Alone",30,"36099","Seneca County, New York",30,0
+"36","099","Asian Alone",259,"36099","Seneca County, New York",259,0
+"36","099","NHOPI Alone",0,"36099","Seneca County, New York",0,0
+"36","099","Other",261,"36099","Seneca County, New York",261,0
+"36","099","Two or More",984,"36099","Seneca County, New York",984,0
+"36","099","Non Hispanic White",28850,"36099","Seneca County, New York",28850,0
+"36","099","Hispanic",861,"36099","Seneca County, New York",861,0
+"36","101","White Alone",86101,"36101","Steuben County, New York",86101,0
+"36","101","Black Alone",1070,"36101","Steuben County, New York",1070,0
+"36","101","AIAN Alone",136,"36101","Steuben County, New York",136,0
+"36","101","Asian Alone",1448,"36101","Steuben County, New York",1448,0
+"36","101","NHOPI Alone",0,"36101","Steuben County, New York",0,0
+"36","101","Other",391,"36101","Steuben County, New York",391,0
+"36","101","Two or More",2234,"36101","Steuben County, New York",2234,0
+"36","101","Non Hispanic White",85605,"36101","Steuben County, New York",85605,0
+"36","101","Hispanic",1027,"36101","Steuben County, New York",1027,0
+"36","103","White Alone",1064325,"36103","Suffolk County, New York",1048495,-15830
+"36","103","Black Alone",105163,"36103","Suffolk County, New York",90182,-14981
+"36","103","AIAN Alone",6225,"36103","Suffolk County, New York",5675,-550
+"36","103","Asian Alone",61689,"36103","Suffolk County, New York",59997,-1692
+"36","103","NHOPI Alone",269,"36103","Suffolk County, New York",126,-143
+"36","103","Other",131157,"36103","Suffolk County, New York",102971,-28186
+"36","103","Two or More",129083,"36103","Suffolk County, New York",112410,-16673
+"36","103","Non Hispanic White",986620,"36103","Suffolk County, New York",981183,-5437
+"36","103","Hispanic",310993,"36103","Suffolk County, New York",255676,-55317
+"36","105","White Alone",56330,"36105","Sullivan County, New York",56330,0
+"36","105","Black Alone",4759,"36105","Sullivan County, New York",4759,0
+"36","105","AIAN Alone",444,"36105","Sullivan County, New York",444,0
+"36","105","Asian Alone",1442,"36105","Sullivan County, New York",1442,0
+"36","105","NHOPI Alone",0,"36105","Sullivan County, New York",0,0
+"36","105","Other",5198,"36105","Sullivan County, New York",5198,0
+"36","105","Two or More",6504,"36105","Sullivan County, New York",6504,0
+"36","105","Non Hispanic White",52646,"36105","Sullivan County, New York",52646,0
+"36","105","Hispanic",12983,"36105","Sullivan County, New York",12983,0
+"36","107","White Alone",45175,"36107","Tioga County, New York",45175,0
+"36","107","Black Alone",279,"36107","Tioga County, New York",279,0
+"36","107","AIAN Alone",0,"36107","Tioga County, New York",0,0
+"36","107","Asian Alone",470,"36107","Tioga County, New York",470,0
+"36","107","NHOPI Alone",4,"36107","Tioga County, New York",4,0
+"36","107","Other",528,"36107","Tioga County, New York",528,0
+"36","107","Two or More",1072,"36107","Tioga County, New York",1072,0
+"36","107","Non Hispanic White",44796,"36107","Tioga County, New York",44796,0
+"36","107","Hispanic",960,"36107","Tioga County, New York",960,0
+"36","109","White Alone",73911,"36109","Tompkins County, New York",73911,0
+"36","109","Black Alone",1938,"36109","Tompkins County, New York",1938,0
+"36","109","AIAN Alone",70,"36109","Tompkins County, New York",70,0
+"36","109","Asian Alone",6240,"36109","Tompkins County, New York",6240,0
+"36","109","NHOPI Alone",0,"36109","Tompkins County, New York",0,0
+"36","109","Other",993,"36109","Tompkins County, New York",993,0
+"36","109","Two or More",5267,"36109","Tompkins County, New York",5267,0
+"36","109","Non Hispanic White",72762,"36109","Tompkins County, New York",72762,0
+"36","109","Hispanic",3750,"36109","Tompkins County, New York",3750,0
+"36","111","White Alone",136678,"36111","Ulster County, New York",134242,-2436
+"36","111","Black Alone",7692,"36111","Ulster County, New York",7678,-14
+"36","111","AIAN Alone",912,"36111","Ulster County, New York",912,0
+"36","111","Asian Alone",3548,"36111","Ulster County, New York",3548,0
+"36","111","NHOPI Alone",24,"36111","Ulster County, New York",24,0
+"36","111","Other",7010,"36111","Ulster County, New York",6981,-29
+"36","111","Two or More",12694,"36111","Ulster County, New York",12313,-381
+"36","111","Non Hispanic White",131911,"36111","Ulster County, New York",129585,-2326
+"36","111","Hispanic",17149,"36111","Ulster County, New York",16973,-176
+"36","113","White Alone",60248,"36113","Warren County, New York",60248,0
+"36","113","Black Alone",870,"36113","Warren County, New York",870,0
+"36","113","AIAN Alone",24,"36113","Warren County, New York",24,0
+"36","113","Asian Alone",420,"36113","Warren County, New York",420,0
+"36","113","NHOPI Alone",0,"36113","Warren County, New York",0,0
+"36","113","Other",296,"36113","Warren County, New York",296,0
+"36","113","Two or More",2630,"36113","Warren County, New York",2630,0
+"36","113","Non Hispanic White",59677,"36113","Warren County, New York",59677,0
+"36","113","Hispanic",1544,"36113","Warren County, New York",1544,0
+"36","115","White Alone",54727,"36115","Washington County, New York",54727,0
+"36","115","Black Alone",219,"36115","Washington County, New York",219,0
+"36","115","AIAN Alone",66,"36115","Washington County, New York",66,0
+"36","115","Asian Alone",282,"36115","Washington County, New York",282,0
+"36","115","NHOPI Alone",20,"36115","Washington County, New York",20,0
+"36","115","Other",976,"36115","Washington County, New York",976,0
+"36","115","Two or More",1909,"36115","Washington County, New York",1909,0
+"36","115","Non Hispanic White",54195,"36115","Washington County, New York",54195,0
+"36","115","Hispanic",1198,"36115","Washington County, New York",1198,0
+"36","117","White Alone",81488,"36117","Wayne County, New York",81488,0
+"36","117","Black Alone",1524,"36117","Wayne County, New York",1524,0
+"36","117","AIAN Alone",540,"36117","Wayne County, New York",540,0
+"36","117","Asian Alone",527,"36117","Wayne County, New York",527,0
+"36","117","NHOPI Alone",56,"36117","Wayne County, New York",56,0
+"36","117","Other",1201,"36117","Wayne County, New York",1201,0
+"36","117","Two or More",3746,"36117","Wayne County, New York",3746,0
+"36","117","Non Hispanic White",80648,"36117","Wayne County, New York",80648,0
+"36","117","Hispanic",3333,"36117","Wayne County, New York",3333,0
+"36","119","White Alone",550632,"36119","Westchester County, New York",550632,0
+"36","119","Black Alone",130508,"36119","Westchester County, New York",130508,0
+"36","119","AIAN Alone",5584,"36119","Westchester County, New York",5584,0
+"36","119","Asian Alone",61406,"36119","Westchester County, New York",61406,0
+"36","119","NHOPI Alone",322,"36119","Westchester County, New York",322,0
+"36","119","Other",126227,"36119","Westchester County, New York",126227,0
+"36","119","Two or More",97223,"36119","Westchester County, New York",97223,0
+"36","119","Non Hispanic White",506980,"36119","Westchester County, New York",506980,0
+"36","119","Hispanic",251866,"36119","Westchester County, New York",251866,0
+"36","121","White Alone",35043,"36121","Wyoming County, New York",35043,0
+"36","121","Black Alone",150,"36121","Wyoming County, New York",150,0
+"36","121","AIAN Alone",1,"36121","Wyoming County, New York",1,0
+"36","121","Asian Alone",243,"36121","Wyoming County, New York",243,0
+"36","121","NHOPI Alone",0,"36121","Wyoming County, New York",0,0
+"36","121","Other",873,"36121","Wyoming County, New York",873,0
+"36","121","Two or More",893,"36121","Wyoming County, New York",893,0
+"36","121","Non Hispanic White",34740,"36121","Wyoming County, New York",34740,0
+"36","121","Hispanic",992,"36121","Wyoming County, New York",992,0
+"36","123","White Alone",22596,"36123","Yates County, New York",22596,0
+"36","123","Black Alone",53,"36123","Yates County, New York",53,0
+"36","123","AIAN Alone",16,"36123","Yates County, New York",16,0
+"36","123","Asian Alone",150,"36123","Yates County, New York",150,0
+"36","123","NHOPI Alone",0,"36123","Yates County, New York",0,0
+"36","123","Other",171,"36123","Yates County, New York",171,0
+"36","123","Two or More",356,"36123","Yates County, New York",356,0
+"36","123","Non Hispanic White",22398,"36123","Yates County, New York",22398,0
+"36","123","Hispanic",424,"36123","Yates County, New York",424,0

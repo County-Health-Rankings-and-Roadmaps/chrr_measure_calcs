@@ -1,0 +1,257 @@
+---
+title: "compare with GL sas output"
+format: html
+editor: visual
+---
+
+```{r}
+gl = haven::read_sas("P:/CH-Ranking/Data/2024/3 Data calculated needs checking/v147.sas7bdat")
+
+summary(gl)
+```
+
+```{r v147 county vals }
+glhow = merge(gl, v147_2, by = c("statecode", "countycode"))
+diffs = glhow %>% mutate(rawdiff = v147_rawvalue.x - v147_rawvalue.y,
+                 cilowdiff = v147_cilow.x - v147_cilow.y, 
+                 cihighdiff = v147_cihigh.x - v147_cihigh.y) %>% 
+  select(rawdiff, cilowdiff, cihighdiff)
+summary(diffs)
+```
+
+```{r v147 other data }
+gl_other = haven::read_sas("P:/CH-Ranking/Data/2025/3 Data calculated needs checking/v147_otherdata.sas7bdat")
+
+glhow = merge(gl_other, v147_other, by = c("statecode", "countycode"))
+dupnames = names(glhow)[-c(1,2, 24)] #remove the ct flag as well as fips
+nm = unique(gsub("\\..*", "", dupnames))
+exes = paste0(nm, ".x")
+whys = paste0(nm, ".y")
+
+
+
+
+diffs = data.frame(statecode = glhow$statecode, countycode = glhow$countycode) 
+ for(i in 1:length(exes)) {
+   dtemp = glhow[, exes[i]] - glhow[, whys[i]] 
+   diffs[,exes[i]] = dtemp 
+}
+
+summary(diffs)
+
+colSums(diffs[-c(1,2)], na.rm = TRUE)
+
+temp = diffs %>% filter(rowSums(.>0.001) > 0)
+
+```
+
+```{r v135 countyvals}
+gl = haven::read_sas("P:/CH-Ranking/Data/2024/3 Data calculated needs checking/v135.sas7bdat")
+
+glhow = merge(gl, v135_2, by = c("statecode", "countycode"))
+
+nas = glhow %>% filter(is.na(v135_rawvalue.x) & !is.na(v135_rawvalue.y) | 
+                         !is.na(v135_rawvalue.x) & is.na(v135_rawvalue.y) | 
+                         is.na(v135_cilow.x) & !is.na(v135_cilow.y) |
+                         !is.na(v135_cilow.x) & is.na(v135_cilow.y) |
+                         is.na(v135_cihigh.x) & !is.na(v135_cihigh.y) |
+                         !is.na(v135_cihigh.x) & is.na(v135_cihigh.y))
+
+diffs = glhow %>% mutate(rawdiff = v135_rawvalue.x - v135_rawvalue.y,
+                 cilowdiff = v135_cilow.x - v135_cilow.y, 
+                 cihighdiff = v135_cihigh.x - v135_cihigh.y) %>% 
+  select(rawdiff, cilowdiff, cihighdiff)
+summary(diffs)
+```
+
+```{r v135 subgroup vals}
+gl_other = haven::read_sas("P:/CH-Ranking/Data/2024/3 Data calculated needs checking/v135_otherdata.sas7bdat")
+
+glhow = merge(gl_other, v135_other, by = c("statecode", "countycode"))
+dupnames = names(glhow)[-c(1,2)]
+nm = unique(gsub("\\..*", "", dupnames))
+exes = paste0(nm, ".x")
+whys = paste0(nm, ".y")
+
+
+
+
+diffs = data.frame(statecode = glhow$statecode, countycode = glhow$countycode) 
+ for(i in 1:length(exes)) {
+   dtemp = glhow[, exes[i]] - glhow[, whys[i]] 
+   diffs[,exes[i]] = dtemp 
+}
+
+summary(diffs)
+
+colSums(diffs[-c(1,2)], na.rm = TRUE)
+
+temp = diffs %>% filter(rowSums(.>0.00001) > 0)
+
+
+```
+
+```{r v015 subgroup vals}
+gl_other = haven::read_sas("P:/CH-Ranking/Data/2024/3 Data calculated needs checking/v015_otherdata.sas7bdat")
+
+glhow = merge(gl_other, v015_other, by = c("statecode", "countycode"))
+dupnames = names(glhow)[-c(1,2)]
+nm = unique(gsub("\\..*", "", dupnames))
+exes = paste0(nm, ".x")
+whys = paste0(nm, ".y")
+
+
+
+
+diffs = data.frame(statecode = glhow$statecode, countycode = glhow$countycode) 
+ for(i in 1:length(exes)) {
+   dtemp = glhow[, exes[i]] - glhow[, whys[i]] 
+   diffs[,exes[i]] = dtemp 
+}
+
+summary(diffs)
+
+colSums(diffs[-c(1,2)], na.rm = TRUE)
+
+temp = diffs %>% filter(rowSums(.>0.00001) > 0)
+
+v015_other %>% filter(statecode =="48" & countycode == "135") %>% select(numerator, denominator, v015_race_hispanic)
+
+v015_other %>% filter(statecode =="48" & countycode == "135") %>% select(v015_race_hispanic)
+```
+
+```{r v148 subgroup vals}
+gl_other = haven::read_sas("P:/CH-Ranking/Data/2024/3 Data calculated needs checking/v148_otherdata.sas7bdat")
+
+glhow = merge(gl_other, v148_other, by = c("statecode", "countycode"))
+dupnames = names(glhow)[-c(1,2)]
+nm = unique(gsub("\\..*", "", dupnames))
+exes = paste0(nm, ".x")
+whys = paste0(nm, ".y")
+
+
+
+
+diffs = data.frame(statecode = glhow$statecode, countycode = glhow$countycode) 
+ for(i in 1:length(exes)) {
+   dtemp = glhow[, exes[i]] - glhow[, whys[i]] 
+   diffs[,exes[i]] = dtemp 
+}
+
+summary(diffs)
+
+colSums(diffs[-c(1,2)], na.rm = TRUE)
+
+temp = diffs %>% filter(rowSums(.>0.00001) > 0)
+
+
+temp = diffs %>% filter(v148_race_white.x > 1)
+```
+
+```{r v039 subgroup vals}
+gl_other = haven::read_sas("P:/CH-Ranking/Data/2024/3 Data calculated needs checking/v039_otherdata.sas7bdat")
+
+glhow = merge(gl_other, v039_other, by = c("statecode", "countycode"))
+dupnames = names(glhow)[-c(1,2)]
+nm = unique(gsub("\\..*", "", dupnames))
+exes = paste0(nm, ".x")
+whys = paste0(nm, ".y")
+
+
+
+
+diffs = data.frame(statecode = glhow$statecode, countycode = glhow$countycode) 
+ for(i in 1:length(exes)) {
+   dtemp = glhow[, exes[i]] - glhow[, whys[i]] 
+   diffs[,exes[i]] = dtemp 
+}
+
+summary(diffs)
+
+colSums(diffs[-c(1,2)], na.rm = TRUE)
+
+temp = diffs %>% filter(rowSums(.>0.00001) > 0)
+summary(gl_other)
+summary(v039_other)
+```
+
+```{r v128 subgroup vals}
+gl_other = haven::read_sas("P:/CH-Ranking/Data/2024/3 Data calculated needs checking/v128_otherdata.sas7bdat")
+
+glhow = merge(gl_other, v128_other, by = c("statecode", "countycode"))
+dupnames = names(glhow)[-c(1,2)]
+nm = unique(gsub("\\..*", "", dupnames))
+exes = paste0(nm, ".x")
+whys = paste0(nm, ".y")
+
+
+
+
+diffs = data.frame(statecode = glhow$statecode, countycode = glhow$countycode) 
+ for(i in 1:length(exes)) {
+   dtemp = glhow[, exes[i]] - glhow[, whys[i]] 
+   diffs[,exes[i]] = dtemp 
+}
+
+summary(diffs)
+
+colSums(diffs[-c(1,2)], na.rm = TRUE)
+
+temp = diffs %>% filter(rowSums(.>0.00001) > 0)
+summary(gl_other)
+summary(v128_other)
+```
+
+```{r v127 subgroup vals}
+gl_other = haven::read_sas("P:/CH-Ranking/Data/2024/3 Data calculated needs checking/v127_otherdata.sas7bdat")
+
+glhow = merge(gl_other, v127_other, by = c("statecode", "countycode"))
+dupnames = names(glhow)[-c(1,2)]
+nm = unique(gsub("\\..*", "", dupnames))
+exes = paste0(nm, ".x")
+whys = paste0(nm, ".y")
+
+
+
+
+diffs = data.frame(statecode = glhow$statecode, countycode = glhow$countycode) 
+ for(i in 1:length(exes)) {
+   dtemp = glhow[, exes[i]] - glhow[, whys[i]] 
+   diffs[,exes[i]] = dtemp 
+}
+
+summary(diffs)
+
+colSums(diffs[-c(1,2)], na.rm = TRUE)
+
+temp = diffs %>% filter(rowSums(.>0.000000000001) > 0)
+summary(gl_other)
+summary(v127_other)
+```
+
+```{r v129 subgroup vals}
+gl_other = haven::read_sas("P:/CH-Ranking/Data/2024/3 Data calculated needs checking/v129_otherdata.sas7bdat")
+
+glhow = merge(gl_other, v129_other, by = c("statecode", "countycode"))
+dupnames = names(glhow)[-c(1,2)]
+nm = unique(gsub("\\..*", "", dupnames))
+exes = paste0(nm, ".x")
+whys = paste0(nm, ".y")
+
+
+
+
+diffs = data.frame(statecode = glhow$statecode, countycode = glhow$countycode) 
+ for(i in 1:length(exes)) {
+   dtemp = glhow[, exes[i]] - glhow[, whys[i]] 
+   diffs[,exes[i]] = dtemp 
+}
+
+summary(diffs)
+
+colSums(diffs[-c(1,2)], na.rm = TRUE)
+
+temp = diffs %>% filter(rowSums(.>0.000000000001) > 0)
+summary(gl_other)
+summary(v129_other)
+```

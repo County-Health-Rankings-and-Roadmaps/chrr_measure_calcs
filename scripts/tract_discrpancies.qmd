@@ -1,0 +1,114 @@
+---
+title: "Explore Tract level errors"
+format: html
+editor: visual
+---
+
+```{r}
+# explore the tract level differences 
+
+
+ttt = read.csv("raw_data/ACS/v141_tract.csv")
+ccc = read.csv("raw_data/ACS/v141_county.csv")
+
+
+ccc$statecode = stringr::str_pad(ccc$statecode, width = 2,side = "left", pad = "0")
+ccc$countycode = stringr::str_pad(ccc$countycode, width = 3, side = "left", pad = "0")
+ttt$statecode = stringr::str_pad(ttt$statecode, width = 2,side = "left", pad = "0")
+ttt$countycode = stringr::str_pad(ttt$countycode, width = 3, side = "left", pad = "0")
+
+
+
+
+ccc$btot = ccc$B11002B_001E #county level black pop  
+ccc$wtot = ccc$B11002A_001E #county level white pop 
+ccc$tot = ccc$B11002_001E #total county tot pop 
+
+ttt$bi = ttt$B11002B_001E #tract level black pop
+ttt$wi = ttt$B11002A_001E #tract level white pop 
+ttt$toti = ttt$B11002_001E #tract level tot pop 
+
+
+counties_from_tracts = ttt %>% group_by(statecode, countycode) %>% 
+  summarize(btot = sum(bi, na.rm = TRUE), 
+            wtot = sum(wi, na.rm = TRUE), 
+            tot = sum(toti, na.rm = TRUE))
+
+both = merge(counties_from_tracts, ccc, by = c("statecode", "countycode"))
+both$needcheck = both$btot.x - both$btot.y
+
+
+```
+
+```{r}
+# Define the ACS variables
+acs_vars <- c("B11002A_001", "B11002B_001", "B11002C_001",
+              "B11002D_001", "B11002E_001", "B11002F_001",
+              "B11002G_001", "B11002H_001", "B11002I_001")
+
+# Define the ACS year and survey
+acs_year <- 2023  # Update as needed
+acs_survey <- "acs5"
+
+# Get data at the Census Tract level
+tract_data <- tidycensus::get_acs(geography = "tract", 
+                      variables = acs_vars, 
+                      year = acs_year, 
+                      survey = acs_survey, 
+                      state = "NY", 
+                      geometry = FALSE) %>%
+  mutate(level = "tract")
+
+# Get data at the County level
+county_data <- tidycensus::get_acs(geography = "county", 
+                       variables = acs_vars, 
+                       year = acs_year, 
+                       survey = acs_survey, 
+                       state = "NY", 
+                       geometry = FALSE) %>%
+  mutate(level = "county")
+
+county_data$statecode = substring(county_data$GEOID, 1,2)
+county_data$countycode = substring(county_data$GEOID, 3,5)
+tract_data$statecode = substring(tract_data$GEOID, 1,2)
+tract_data$countycode = substring(tract_data$GEOID, 3,5)
+
+
+counties_from_tracts <- tract_data %>%
+  group_by(statecode, countycode, variable) %>%
+  summarize(estimate = sum(estimate, na.rm = TRUE))
+
+
+both = merge(counties_from_tracts, county_data, by = c("statecode", "countycode", "variable"))
+
+both$diff = both$estimate.x - both$estimate.y
+```
+
+```{r}
+# some formatting 
+library(dplyr)
+library(stringr)
+
+cleaned_data <- both %>%
+  rename(county_value = estimate.y, 
+         sum_of_tracts = estimate.x) %>%
+  select(-level) %>%
+  mutate(race = case_when(
+    str_sub(variable, -5, -5) == "A" ~ "White Alone",
+    str_sub(variable, -5, -5) == "B" ~ "Black Alone",
+    str_sub(variable, -5, -5) == "C" ~ "AIAN Alone",
+    str_sub(variable, -5, -5) == "D" ~ "Asian Alone",
+    str_sub(variable, -5, -5) == "E" ~ "NHOPI Alone",
+    str_sub(variable, -5, -5) == "F" ~ "Other",
+    str_sub(variable, -5, -5) == "G" ~ "Two or More",
+    str_sub(variable, -5, -5) == "H" ~ "Non Hispanic White",
+    str_sub(variable, -5, -5) == "I" ~ "Hispanic",
+    TRUE ~ NA_character_  # Default to NA if no match is found
+  )) %>%
+  select(statecode, countycode, race, county_value, GEOID, NAME, sum_of_tracts, diff)  # Reorder columns
+
+# View the cleaned dataset
+head(cleaned_data)
+
+write.csv(cleaned_data, row.names = FALSE, file = "~/chrr_measure_calcs/tempfiles/all_race_discrepancies.csv")
+```
