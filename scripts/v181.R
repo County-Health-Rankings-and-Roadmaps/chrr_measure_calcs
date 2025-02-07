@@ -31,9 +31,16 @@ cfips = haven::read_sas("P:/CH-Ranking/Data/2025/2 Cleaned data ready for Calcul
 sfips = haven::read_sas("P:/CH-Ranking/Data/2025/2 Cleaned data ready for Calculation or Verification/state_fips.sas7bdat")
 fips = rbind(cfips, sfips)
 
+
+outletae_fips = merge(fips, outletae_clean, by.x = c("state", "countycode"), by.y = c("STABR.x", "CDCODE.x"), all.y = TRUE)
+
+
+
+
+
 # Clean the 'county' column in fips by removing the "county" string and converting to lowercase
 fips_cleaned <- fips %>%
-  mutate(county_clean = tolower(stringr::str_remove_all(county, "\\b( County | Planning Region| City| Borough| Parish| Census Area)\\b")))
+  mutate(county_clean = tolower(stringr::str_remove_all(county, stringr::str_c("\\b", c( " County", " Planning Region", " City", "Borough", " Parish", " Census Area"), "\\b", collapse = "|"))))
 
 # Clean the 'CNTY.x' column in outletae_clean by converting to lowercase
 outletae_clean <- outletae_clean %>%
