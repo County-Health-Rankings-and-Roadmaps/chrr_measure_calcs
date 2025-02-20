@@ -127,7 +127,13 @@ scall <- scall %>%
   )
 
 
+# suppress ulster and suffolk counties 
+# 36103 ; 36111
 
+scall = scall %>% mutate(
+  rawvalue = if_else((statecode == "36" & countycode %in% c("103", "111")), 
+                     NA, rawvalue)
+)
 
 
 

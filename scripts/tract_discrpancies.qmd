@@ -1,46 +1,52 @@
 ---
-title: "Explore Tract level errors"
+title: "Potential missing tracts in Suffolk county, NY and Uster county, NY"
 format: html
 editor: visual
 ---
 
-```{r}
+Dear Census,
+
+We recently encountered an inconsistency in the 2023 5-year county-level datasets for the race-specific household values (001) in tables B11002A-I.
+
+We found that the sum of the tract-level race-specific values is not equal to the county-level values in Suffolk County, NY and Ulster County, NY.
+
+```{r using raw csvs - to be deleted!!!}
+library(tidyverse)
 # explore the tract level differences 
 
+#ttt= read_csv(file = "~/chrr_measure_calcs/raw_data/ACS/v141_county.csv")
+#ccc = read_csv(file = "~/chrr_measure_calcs/raw_data/ACS/v141_county.csv")
 
-ttt = read.csv("raw_data/ACS/v141_tract.csv")
-ccc = read.csv("raw_data/ACS/v141_county.csv")
 
-
-ccc$statecode = stringr::str_pad(ccc$statecode, width = 2,side = "left", pad = "0")
-ccc$countycode = stringr::str_pad(ccc$countycode, width = 3, side = "left", pad = "0")
-ttt$statecode = stringr::str_pad(ttt$statecode, width = 2,side = "left", pad = "0")
-ttt$countycode = stringr::str_pad(ttt$countycode, width = 3, side = "left", pad = "0")
-
+#ccc$statecode = stringr::str_pad(ccc$statecode, width = 2,side = "left", pad = "0")
+#ccc$countycode = stringr::str_pad(ccc$countycode, width = 3, side = "left", pad = "0")
+#ttt$statecode = stringr::str_pad(ttt$statecode, width = 2,side = "left", pad = "0")
+#ttt$countycode = stringr::str_pad(ttt$countycode, width = 3, side = "left", pad = "0")
 
 
 
-ccc$btot = ccc$B11002B_001E #county level black pop  
-ccc$wtot = ccc$B11002A_001E #county level white pop 
-ccc$tot = ccc$B11002_001E #total county tot pop 
 
-ttt$bi = ttt$B11002B_001E #tract level black pop
-ttt$wi = ttt$B11002A_001E #tract level white pop 
-ttt$toti = ttt$B11002_001E #tract level tot pop 
+#ccc$btot = ccc$B11002B_001E #county level black pop  
+#ccc$wtot = ccc$B11002A_001E #county level white pop 
+#ccc$tot = ccc$B11002_001E #total county tot pop 
+
+#ttt$bi = ttt$B11002B_001E #tract level black pop
+#ttt$wi = ttt$B11002A_001E #tract level white pop 
+#ttt$toti = ttt$B11002_001E #tract level tot pop 
 
 
-counties_from_tracts = ttt %>% group_by(statecode, countycode) %>% 
-  summarize(btot = sum(bi, na.rm = TRUE), 
-            wtot = sum(wi, na.rm = TRUE), 
-            tot = sum(toti, na.rm = TRUE))
+#counties_from_tracts = ttt %>% group_by(statecode, countycode) %>% 
+#  summarize(btot = sum(bi, na.rm = TRUE), 
+#            wtot = sum(wi, na.rm = TRUE), 
+#            tot = sum(toti, na.rm = TRUE))
 
-both = merge(counties_from_tracts, ccc, by = c("statecode", "countycode"))
-both$needcheck = both$btot.x - both$btot.y
+#both = merge(counties_from_tracts, ccc, by = c("statecode", "countycode"))
+#both$needcheck = both$btot.x - both$btot.y
 
 
 ```
 
-```{r}
+```{r using tidycensus for all races }
 # Define the ACS variables
 acs_vars <- c("B11002A_001", "B11002B_001", "B11002C_001",
               "B11002D_001", "B11002E_001", "B11002F_001",
@@ -84,16 +90,16 @@ both = merge(counties_from_tracts, county_data, by = c("statecode", "countycode"
 both$diff = both$estimate.x - both$estimate.y
 ```
 
-```{r}
+```{r print a nice table }
 # some formatting 
 library(dplyr)
 library(stringr)
 
 cleaned_data <- both %>%
-  rename(county_value = estimate.y, 
-         sum_of_tracts = estimate.x) %>%
+  rename(County_value = estimate.y, 
+         Sum_of_tracts = estimate.x) %>%
   select(-level) %>%
-  mutate(race = case_when(
+  mutate(Race = case_when(
     str_sub(variable, -5, -5) == "A" ~ "White Alone",
     str_sub(variable, -5, -5) == "B" ~ "Black Alone",
     str_sub(variable, -5, -5) == "C" ~ "AIAN Alone",
@@ -105,10 +111,22 @@ cleaned_data <- both %>%
     str_sub(variable, -5, -5) == "I" ~ "Hispanic",
     TRUE ~ NA_character_  # Default to NA if no match is found
   )) %>%
-  select(statecode, countycode, race, county_value, GEOID, NAME, sum_of_tracts, diff)  # Reorder columns
+  select(statecode, countycode, Race, County_value, GEOID, NAME, Sum_of_tracts, diff)  # Reorder columns
+
+
+# Subset the data where diff != 0
+subset_data <- cleaned_data[cleaned_data$diff != 0, ]
+
+library(knitr)
+library(kableExtra)
+# Create a "pretty" table using kable and kableExtra
+kable(subset_data, "latex", caption = "Table of Subset Data with diff != 0") %>%
+  kable_styling(latex_options = c("striped", "hold_position", "scale_down")) %>%
+  column_spec(1, bold = TRUE) %>% # Bold the first column
+  row_spec(0, bold = TRUE, background = "#f2f2f2") # Bold and color the header row
 
 # View the cleaned dataset
-head(cleaned_data)
+#head(cleaned_data)
 
-write.csv(cleaned_data, row.names = FALSE, file = "~/chrr_measure_calcs/tempfiles/all_race_discrepancies.csv")
+#write.csv(cleaned_data, row.names = FALSE, file = "~/chrr_measure_calcs/tempfiles/all_race_discrepancies.csv")
 ```

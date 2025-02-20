@@ -39,6 +39,18 @@ acsvars = c(#renters 50 or more
             "B25074_063",
             
             #total renters 
+            # low income 
+            "B25074_002E",
+            "B25074_011E",
+            "B25074_020E",
+            "B25074_029E",
+            
+            #total renters 
+            # not low income 
+            "B25074_038E",
+            "B25074_047E",
+            
+            
             "B25074_001", 
             
             #renters not computed  
@@ -201,14 +213,15 @@ new154sums = new154 %>% group_by(GEOID) %>%
                                                 "B25074_053",
                                                 "B25074_060",
                                                 "B25074_061",
-                                                "B25074_062",
-                                                "B25074_009",
-                                                "B25074_018",
-                                                "B25074_027",
-                                                "B25074_036",
-                                                "B25074_045",
-                                                "B25074_054",
-                                                "B25074_063")], na.rm = TRUE), 
+                                                "B25074_062"
+                                              #  "B25074_009",
+                                              #  "B25074_018",
+                                              #  "B25074_027",
+                                              #  "B25074_036",
+                                              #  "B25074_045",
+                                              #  "B25074_054",
+                                              #  "B25074_063"
+                                              )], na.rm = TRUE), 
   owners30_lowinc_num = sum(estimate[variable %in% c("B25095_006",
                                                      "B25095_007",
                                                      "B25095_008", 
@@ -241,15 +254,16 @@ new154sums = new154 %>% group_by(GEOID) %>%
                                               "B25095_053",
                                               "B25095_060",
                                               "B25095_061",
-                                              "B25095_062",
-                                              "B25095_009", 
-                                              "B25095_018",
-                                              "B25095_027",
-                                              "B25095_036",
-                                              "B25095_045",
-                                              "B25095_054",
-                                              "B25095_063",
-                                              "B25095_072")], na.rm = TRUE), 
+                                              "B25095_062"
+                                            #  "B25095_009", 
+                                            #  "B25095_018",
+                                            #  "B25095_027",
+                                            #  "B25095_036",
+                                            #  "B25095_045",
+                                            #  "B25095_054",
+                                            #  "B25095_063",
+                                            #  "B25095_072"
+                                            )], na.rm = TRUE), 
   
   owners50_lowinc_num = sum(estimate[variable %in% c( "B25095_009", 
                                                       "B25095_018",
@@ -263,23 +277,7 @@ new154sums = new154 %>% group_by(GEOID) %>%
                                           "B25095_054",
                                           "B25095_063",
                                           "B25095_072")], na.rm = TRUE), 
-  owners_lowinc_denom = sum(estimate[variable %in% c("B25095_002",
-                                                 "B25095_011",
-                                                 "B25095_020",
-                                                 "B25095_029")], na.rm = TRUE),# - 
-   # sum(estimate[variable %in% c("B25095_010",
-  #                                   "B25095_019",
-  #                                   "B25095_028",
-  #                                   "B25095_037")], na.rm = TRUE),
-  owners_denom = estimate[variable == "B25095_001"] - 
-    sum(estimate[variable %in% c("B25095_010",
-                                 "B25095_019",
-                                 "B25095_028",
-                                 "B25095_037",
-                                 "B25095_046",
-                                 "B25095_055",
-                                 "B25095_064",
-                                 "B25095_073")], na.rm = TRUE),
+ 
   renters50_lowinc_num = sum(estimate[variable %in% c("B25074_009",
                                                       "B25074_018",
                                                       "B25074_027",
@@ -291,6 +289,24 @@ new154sums = new154 %>% group_by(GEOID) %>%
                                            "B25074_045",
                                            "B25074_054",
                                            "B25074_063")], na.rm = TRUE),
+  owners_lowinc_denom = (sum(estimate[variable %in% c("B25095_002",
+                                                     "B25095_011",
+                                                     "B25095_020",
+                                                     "B25095_029")], na.rm = TRUE) - 
+    sum(estimate[variable %in% c("B25095_010",
+                                 "B25095_019",
+                                 "B25095_028",
+                                 "B25095_037")], na.rm = TRUE)),
+  owners_denom = estimate[variable == "B25095_001"] - 
+    sum(estimate[variable %in% c("B25095_010",
+                                 "B25095_019",
+                                 "B25095_028",
+                                 "B25095_037",
+                                 "B25095_046",
+                                 "B25095_055",
+                                 "B25095_064",
+                                 "B25095_073")], na.rm = TRUE),
+  
   renters_denom = estimate[variable == "B25074_001"] - 
           sum(estimate[variable %in% c("B25074_010",
                                     "B25074_019",
@@ -302,18 +318,18 @@ new154sums = new154 %>% group_by(GEOID) %>%
   renters_lowinc_denom = sum(estimate[variable %in% c("B25074_002", 
                                                     "B25074_011",
                                                     "B25074_020",
-                                                    "B25074_029")], na.rm = TRUE)# - 
-    #sum(estimate[variable %in% c("B25074_010",
-    #                             "B25074_019",
-    #                             "B25074_028",
-    #                             "B25074_037")], na.rm = TRUE)
+                                                    "B25074_029")], na.rm = TRUE) - 
+    sum(estimate[variable %in% c("B25074_010",
+                                 "B25074_019",
+                                 "B25074_028",
+                                 "B25074_037")], na.rm = TRUE)
   )
 
 new154sums2 = new154sums %>% group_by(GEOID) %>% 
   mutate(renters30ormore_lowinc_num = renters30_lowinc_num + renters50_lowinc_num, 
             owners30ormore_lowinc_num = owners30_lowinc_num + owners50_lowinc_num,
             renters30ormore_num = renters30_num + renters50_num,
-            owners30ormore_num = owners30_num + renters50_num)
+            owners30ormore_num = owners30_num + owners50_num)
 
 
 newnew = merge(new154sums2, fips, by.x = "GEOID", by.y = "fipscode", all.y = TRUE) %>% 
@@ -367,8 +383,7 @@ request = neww153 %>% mutate(
   owners50_lowinc = owners50_lowinc_num/ owners_lowinc_denom, 
   renters50 = renters50_num/ renters_denom, 
   owners50 = owners50_num / owners_denom
-) %>% select(-c(state, county, GEOID))
-
+) %>% select(-c(state, county, GEOID,
                 renters30_num, 
                 renters30_lowinc_num, 
                 owners30_lowinc_num, 
@@ -379,13 +394,5 @@ request = neww153 %>% mutate(
 #add the fips back in one more time to get state names etc 
 requestf = merge(request, fips, by = c("statecode", "countycode"), all.y = TRUE) 
 
-write.csv(requestf, "tempfiles/housingdata_lowinc.csv", row.names = FALSE)
+write.csv(requestf, "duplicated_data/housingdata_lowinc.csv", row.names = FALSE)
 
-
-
-
-
-if (!require("ipumsr")) stop("Reading IPUMS data into R requires the ipumsr package. It can be installed using the following command: install.packages('ipumsr')")
-
-ddi <- ipumsr::read_ipums_ddi("raw_data/IPUMS/usa_00001.dat")
-data <- ipumsr::read_ipums_micro(ddi)
