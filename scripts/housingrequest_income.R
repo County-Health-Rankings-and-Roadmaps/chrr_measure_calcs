@@ -396,3 +396,57 @@ requestf = merge(request, fips, by = c("statecode", "countycode"), all.y = TRUE)
 
 write.csv(requestf, "duplicated_data/housingdata_lowinc.csv", row.names = FALSE)
 
+
+
+
+#################################################################################
+# stats for keith: 
+# Across the United States, XXX,XXX of the YYY,YYY low-income households who rent spend more than 50% of their income on housing costs.  In X counties, nearly 75%(?) of low-income renters have severe housing cost burden.
+
+totalrenters_lowinc = requestf %>% filter(countycode != "000") %>% 
+  summarize(totalrenters_lowinc = sum(renters_lowinc_denom, na.rm = TRUE),
+            costburdenedrenters_lowinc = sum(renters50_lowinc_num, na.rm = TRUE))
+
+perburdened = requestf %>% filter(countycode != "000") %>% group_by(statecode, countycode) %>% 
+  summarize(totalrenters_lowinc = sum(renters_lowinc_denom, na.rm = TRUE),
+            costburdenedrenters_lowinc = sum(renters50_lowinc_num, na.rm = TRUE), 
+            perburdened = costburdenedrenters_lowinc / totalrenters_lowinc) %>% 
+  filter(perburdened >= 0.4) %>% ungroup() %>% 
+  count()
+perburdened
+
+
+
+library(dplyr)
+library(ggplot2)
+
+# Generate the perburdened data frame with different CUTOFFVALUES
+cutoffvalues <- seq(0, 1, by = 0.1)
+result <- data.frame(CUTOFFVALUE = numeric(0), count = numeric(0))
+
+for (cutoff in cutoffvalues) {
+  perburdened <- requestf %>%
+    filter(countycode != "000") %>%
+    group_by(statecode, countycode) %>%
+    summarize(
+      totalrenters_lowinc = sum(renters_lowinc_denom, na.rm = TRUE),
+      costburdenedrenters_lowinc = sum(renters50_lowinc_num, na.rm = TRUE), 
+      perburdened = costburdenedrenters_lowinc / totalrenters_lowinc
+    ) %>%
+    filter(perburdened >= cutoff) %>%
+    ungroup() %>%
+    count()
+  
+  # Add the result to the dataframe
+  result <- result %>%
+    add_row(CUTOFFVALUE = cutoff, count = perburdened$n)
+}
+
+# Plotting the result
+ggplot(result, aes(x = CUTOFFVALUE, y = count)) +
+  geom_line() + 
+  geom_point() +
+  labs(x = "CUTOFFVALUE", y = "Number of Counties", title = "Number of counties with >= X percent of \nlow-income renters with severe housing cost burden") +
+  theme_minimal()
+
+

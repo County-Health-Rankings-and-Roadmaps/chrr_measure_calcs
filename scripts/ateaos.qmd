@@ -1,0 +1,537 @@
+---
+title: "ATE-AOS"
+format: html
+editor: visual
+---
+
+Need a single dataset containing: state zscore, national zscore, national median, and state rawvalue for each fipscode and measureid
+
+```{r load data }
+library(tidyverse)
+tmeasuredata = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/2024 Data/t_measure_data.sas7bdat")
+
+# grab the health factors only (ie where category / factor_parent == 2) 
+tfactor = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/t_factor.sas7bdat") %>% filter(year == 2024 & factor_parent == 2) 
+
+
+# grab the focus areas that are health factors 
+tfocus = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/t_focus_area.sas7bdat") %>% filter(year == 2024 & focus_area_parent %in% tfactor$factor_id) %>% select(focus_area_id, focus_area_numerator, focus_area_denominator)
+
+# grab the ranked health factors only 
+tmeasure = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/t_measure.sas7bdat") %>% filter(year == 2024 & measure_parent %in% tfocus$focus_area_id & measure_type == 0)
+
+
+# get the focus area weights from tfocus and merge them at the measure level 
+tmeasuref = merge(tfocus, tmeasure, by.x = "focus_area_id", by.y ="measure_parent")
+
+
+
+# make countylevel and state level datasets containing ranked (clustered) measures only ; remove national and missing values; add the direction column from tmeasure 
+
+countymeasures = tmeasuredata %>% 
+  filter(measure_id %in% tmeasure$measure_id) %>% 
+   left_join(tmeasuref %>% select(measure_id, direction, weight_numerator, weight_denominator, focus_area_numerator, focus_area_denominator, format_type), by = "measure_id")
+
+
+
+
+```
+
+```{r}
+# calculate zscores 
+
+county_summary = countymeasures %>% 
+  group_by(measure_id) %>% 
+  filter(county_fips != "000" & !is.na(county_fips)) %>% 
+  mutate(nmed = ifelse(measure_id ==9, 0.073, #for 24 only, remove after confirm match 
+                       ifelse(measure_id == 11, 0.245, #for 24 only; remove after confirm match 
+                              median(raw_value, na.rm = TRUE))), 
+            nstd = sd(raw_value, na.rm = TRUE),
+            nmed_other = median(other_data_1, na.rm = TRUE), 
+            nstd_other = sd(other_data_1, na.rm = TRUE),
+            ntlz = direction*(raw_value - nmed) / nstd,
+            crawvalue = raw_value
+         ) %>% 
+  group_by(measure_id, state_fips) %>% 
+  filter(state_fips != "00" & !is.na(state_fips)) %>% 
+  mutate(smed = median(raw_value, na.rm = TRUE), 
+            sstd = sd(raw_value, na.rm = TRUE), 
+            smed_other = median(other_data_1, na.rm = TRUE), 
+            sstd_other = sd(other_data_1, na.rm = TRUE),
+            sz = direction*z_score) 
+
+# add in the state rawvalues 
+
+tstate = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/2024 Data/t_state_data.sas7bdat") %>% 
+  rename(srawvalue = raw_value) %>% 
+  select(srawvalue, measure_id, state_fips)
+
+allzs = merge(county_summary, tstate, 
+              by = c("state_fips", "measure_id"), 
+              all.x = TRUE)
+
+```
+
+```{r now we do some comparisons }
+
+library(dplyr)
+
+
+comp <- allzs %>%
+  mutate(
+    # Determine the maximum of nz and sz
+    atoez = ifelse(ntlz == sz | is.na(ntlz) | is.na(sz), ntlz, pmax(ntlz, sz, na.rm = TRUE)), 
+    
+    # Determine the minimum of nz and sz
+    aofsz = ifelse(ntlz == sz | is.na(ntlz) | is.na(sz), ntlz, pmin(ntlz, sz, na.rm = TRUE)),
+    
+    # Conditional logic for atoecomp
+    atoecomp = ifelse(ntlz == pmax(ntlz, sz, na.rm = TRUE), nmed, srawvalue),
+    
+    # Conditional logic for aofscomp
+    aofscomp = ifelse(ntlz == pmin(ntlz, sz, na.rm = TRUE), nmed, srawvalue),
+    
+    # If nz == sz, set both atoecomp and aofscomp to nmean
+    # If nz and sz are both NA set both atoecomp and aofscomp to nmean
+    atoecomp = ifelse(ntlz == sz | (is.na(ntlz) | is.na(sz)), nmed, atoecomp),
+    aofscomp = ifelse(ntlz == sz | (is.na(ntlz) | is.na(sz)), nmed, aofscomp)
+  )
+
+
+
+
+
+
+
+# add in the measure weights 
+
+score = comp %>% 
+  mutate(atescore = (focus_area_numerator/ focus_area_denominator)*(weight_numerator/weight_denominator) * atoez,
+         aofscore = (focus_area_numerator/ focus_area_denominator)*(weight_numerator/weight_denominator) * aofsz)
+```
+
+```{r some code to compare w sas }
+score %>% filter(measure_id == 4 & state_fips == "01" & county_fips == "001") %>% select(ntlz, sz, atoez, aofsz, atoecomp, aofscomp, atescore, aofscore)
+```
+
+```{r handle measures with and without cis }
+
+# get list of measures with CIs 
+withCIs = score %>% filter(!is.na(ci_low) & !is.na(ci_high)) %>% select(measure_id) %>% distinct()
+
+
+bin <- score %>%
+  mutate(
+    # Set initial binate and binaos values based on atescore and aosscore conditions
+    binate = if_else(!is.na(atescore) & atescore > 0.0012, 1, NA),
+    binaos = if_else(!is.na(aofscore) & aofscore < -0.0012, 1, NA),
+    
+    # Apply the conditions for binate and binaos if measure_id is in the list
+    binate = case_when(
+      measure_id %in% withCIs$measure_id & binate == 1 ~ case_when(
+        atoecomp < ci_low | atoecomp > ci_high ~ 1,
+        ci_low <= atoecomp & atoecomp <= ci_high ~ NA,
+        is.na(ci_low) ~ 1,
+        TRUE ~ binate
+      ),
+     TRUE ~ binate
+    ),
+    
+    binaos = case_when(
+      measure_id %in% withCIs$measure_id & binaos == 1 ~ case_when(
+        aofscomp < ci_low | aofscomp > ci_high ~ 1,
+        ci_low <= aofscomp & aofscomp <= ci_high ~ NA,
+        is.na(ci_low) ~ 1,
+        TRUE ~ binaos
+      ),
+      TRUE ~ binaos
+    )
+  )
+
+
+
+# compare to sas bin 
+binsas = haven::read_sas('P:/CH-Ranking/Data/2024/9 Results/Analysis/ateaos/bin_temp.sas7bdat')
+
+
+
+bincombo = merge(binsas, bin, by = c("measure_id", "state_fips","county_fips"))
+
+bincombo = bincombo %>% mutate(
+  diffaos = ifelse(is.na(binaos.x) & !is.na(binaos.y) | 
+                  !is.na(binaos.x) & is.na(binaos.y) | 
+                  binaos.x - binaos.y != 0, 1, NA),
+  diffate = ifelse(is.na(binate.x) & !is.na(binate.y) | 
+                  !is.na(binate.x) & is.na(binate.y) | 
+                  binate.x - binate.y != 0, 1, NA)) %>% 
+  select(binaos.x, binaos.y, binate.x, binate.y, diffaos, diffate, atescore.x, atescore.y, aosscore, aofscore, atoecomp.x, atoecomp.y, aofscomp.x, aofscomp.y, ci_low.x, ci_high.x)
+
+  
+  
+# these are the spots to check!!!! 
+
+uhoh = bincombo %>% filter(diffate == 1 | diffaos ==1)
+
+```
+
+```{r calculations of the pertinent ratio }
+
+# Get list of measure_ids where all rows have missing ci_low and ci_high
+withoutCIs <- score %>%
+  group_by(measure_id) %>%
+  filter(all(is.na(ci_low) & is.na(ci_high))) %>%  # Ensure all rows for measure_id have missing ci_low and ci_high
+  select(measure_id) %>%
+  distinct() %>%
+  ungroup() %>% filter(measure_id !=124) #remove drinking water 
+
+
+
+prat <- bin %>%
+  mutate(
+    # Apply the conditions for format_type and direction
+    ateprat = ifelse(measure_id %in% withoutCIs$measure_id, 
+                     case_when(
+                       format_type == 1 & direction == 1 ~ 
+                         (crawvalue * (1 - atoecomp)) / (atoecomp * (1 - crawvalue)),
+                       format_type == 1 & direction == -1 ~ 
+                         (atoecomp * (1 - crawvalue)) / (crawvalue * (1 - atoecomp)),
+                       format_type %in% c(0, 3) & direction == 1 ~ 
+                         crawvalue / atoecomp,
+                       format_type %in% c(0, 3) & direction == -1 ~ 
+                         atoecomp / crawvalue,
+                       TRUE ~ NA_real_  # set to NA if no condition is met
+                     ),
+                     NA_real_),  # Set to NA if measure_id is not in `withoutCIs`
+    
+    # Check if ateprat is Inf and replace with NA
+    ateprat = ifelse(is.finite(ateprat), ateprat, NA_real_),
+
+    aosprat = ifelse(measure_id %in% withoutCIs$measure_id, 
+                     case_when(
+                       format_type == 1 & direction == 1 ~ 
+                         (aofscomp * (1 - crawvalue)) / (crawvalue * (1 - aofscomp)),
+                       format_type == 1 & direction == -1 ~ 
+                         (crawvalue * (1 - aofscomp)) / (aofscomp * (1 - crawvalue)),
+                       format_type %in% c(0, 3) & direction == 1 ~ 
+                         aofscomp / crawvalue,
+                       format_type %in% c(0, 3) & direction == -1 ~ 
+                         crawvalue / aofscomp,
+                       TRUE ~ NA_real_  # set to NA if no condition is met
+                     ),
+                     NA_real_),  # Set to NA if measure_id is not in `withoutCIs`
+    
+    # Check if aosprat is Inf and replace with NA
+    aosprat = ifelse(is.finite(aosprat), aosprat, NA_real_)
+  )
+
+
+
+#quick check 
+# prat %>% filter(state_fips == "09" & measure_id == 4)
+```
+
+```{r some more binaos binate }
+
+
+# ORDER MATTERS HERE 
+# CONSIDER RECONFIGURING THIS !!! IT'S BASED ON BAD LOGIC IN OLD SAS CODE; SHOULD BE RECONFIGURED TO BETTER MATCH FLOWCHART 
+f <- prat %>%
+  mutate(
+    # Step 1: Assign initial values based on conditions
+    #binate = ifelse(!is.na(atescore) & atescore > 0.0012, 1, NA),
+    #binaos = ifelse(!is.na(aofscore) & aofscore < -0.0012, 1, NA),
+    
+    # Step 2: Apply conditions for 'binate'
+    binate = case_when(
+      #binate == 1 & 
+      !is.na(atoez) & atoez > 1.8 ~ 1,                    # If atoez > 1.8, set binate to 1
+      !is.na(ateprat) & ateprat < 1.2 ~ NA, # If ateprat < 1.2, set binate to NA
+      
+      TRUE ~ binate                                       # Keep the previous value of binate
+    ),
+    
+    # Step 3: Apply conditions for 'binaos'
+    binaos = case_when(
+      #binaos == 1 & 
+      !is.na(aofsz) & aofsz < -1.8 ~ 1,                     # If aofsz < -1.8, set binaos to 1
+      !is.na(aosprat) & aosprat < 1.2 ~ NA,  # If aosprat < 1.2, set binaos to NA
+      
+      TRUE ~ binaos                                         # Keep the previous value of binaos
+    ),
+    
+    # Step 4: Final condition to set 'binboth'
+    binboth = ifelse(binate == 1 & binaos == 1, 1, NA)
+  )
+
+
+
+
+# compare to sas F 
+fsas = haven::read_sas('P:/CH-Ranking/Data/2024/9 Results/Analysis/ateaos/f_temp.sas7bdat')
+
+fcombo = merge(f, fsas, by = c("measure_id", "state_fips","county_fips"))
+
+fcombo = fcombo %>% mutate(
+  diffaos = ifelse(is.na(binaos.x) & !is.na(binaos.y) | 
+                  !is.na(binaos.x) & is.na(binaos.y) | 
+                  binaos.x - binaos.y != 0, 1, NA),
+  diffate = ifelse(is.na(binate.x) & !is.na(binate.y) | 
+                  !is.na(binate.x) & is.na(binate.y) | 
+                  binate.x - binate.y != 0, 1, NA)) %>% 
+  select(binaos.x, binaos.y, binate.x, binate.y, diffaos, diffate, 
+         atoez.x, atoez.y, aofsz.x, aofsz.y, aosprat.x, aosprat.y, 
+         ateprat.x, ateprat.y,
+         measure_id, state_fips, county_fips) #, binaos1, binate1)
+
+  
+  
+# these are the spots to check!!!! 
+
+uhoh = fcombo %>% filter(diffate == 1 | diffaos ==1) %>% 
+  filter(measure_id %in% uhohcodes$measure_id & 
+           state_fips %in% uhohcodes$state_fips & 
+           county_fips %in% uhohcodes$county_fips)
+
+uhohcodes = uhoh %>% select(measure_id, state_fips, county_fips)
+
+
+
+```
+
+```{r some more assignment of bins }
+f1 <- f %>%
+  mutate(
+    # Modify binaos, binate, and conditions for binboth
+    binaos = case_when(
+      binboth == 1 & sz >= ntlz ~ NA,
+      binboth == 1 & sz <= ntlz ~ binaos,
+      binboth == 1 & measure_id %in% c(9, 11) ~ NA,
+      TRUE ~ binaos
+    ),
+    binate = case_when(
+      binboth == 1 & measure_id %in% c(9, 11) ~ 1,
+      binboth == 1 & sz <= ntlz ~ NA,
+     
+      TRUE ~ binate
+    ),
+    # Handle the special case for measure_id == 124
+    binaos = if_else(measure_id == 124, NA, binaos),
+    binate = if_else(measure_id == 124, NA, binate),
+    # Remove binaos for measure_id 9 and 11
+    binaos = if_else(measure_id %in% c(9, 11), NA, binaos)
+  )
+
+
+# compare to sas F 
+fsas = haven::read_sas('P:/CH-Ranking/Data/2024/9 Results/Analysis/ateaos/f1_temp.sas7bdat')
+
+fcombo = merge(f1, fsas, by = c("measure_id", "state_fips","county_fips"))
+
+fcombo = fcombo %>% mutate(
+  diffaos = ifelse(is.na(binaos.x) & !is.na(binaos.y) | 
+                  !is.na(binaos.x) & is.na(binaos.y) | 
+                  binaos.x - binaos.y != 0, 1, NA),
+  diffate = ifelse(is.na(binate.x) & !is.na(binate.y) | 
+                  !is.na(binate.x) & is.na(binate.y) | 
+                  binate.x - binate.y != 0, 1, NA)) %>% 
+  select(binaos.x, binaos.y, binate.x, binate.y, diffaos, diffate, 
+         binboth.x, sz.x, ntlz, 
+         measure_id, state_fips, county_fips) #, binaos1, binate1)
+
+  
+  
+# these are the spots to check!!!! 
+
+uhoh = fcombo %>% filter(diffate == 1 | diffaos ==1) 
+
+# consider moving f1 into SAS and then using SAS Code from there 
+
+```
+
+```{r find counties w fewer than 3 aos }
+
+
+# Calculate the sum of binaos by state_fips and county_fips
+aoscount <- f1 %>%
+  group_by(state_fips, county_fips) %>%
+  summarise(sumaos = sum(binaos, na.rm = TRUE), .groups = 'drop')
+
+
+# Create needaos flag based on sumaos
+needaos <- aoscount %>%
+  mutate(
+    needaos = ifelse(sumaos < 3 & !is.na(sumaos), 1, 0),
+    sumaos = ifelse(is.na(sumaos), 0, sumaos)  # Replace missing sumaos with 0
+  )
+
+
+
+# Merge the f1 dataset with 'needaos' by state_fips and county_fips
+newcount <- f1 %>%
+  left_join(needaos, by = c("state_fips", "county_fips")) %>% 
+  filter(!(measure_id %in% c(9,11,124)))
+
+
+# Filter counties with needaos == 1 and binaos not equal to 1 (ie missing!!)
+newcount_sorted <- newcount %>%
+  filter(needaos == 1 & is.na(binaos))
+
+```
+
+```{r}
+library(dplyr)
+
+# Step 1: Rank the data by state_fips and county_fips, and create the rank for aosscore
+ranked <- newcount_sorted %>%
+  arrange(state_fips, county_fips, aofscore) %>%  # Sorting in descending order to get the lowest first
+  group_by(state_fips, county_fips) %>%
+  mutate(rank_aofscore = ifelse(!is.na(aofscore), row_number(), NA)) %>%  # Only rank non-missing values
+  ungroup()
+# the important vars here appear to match those in SAS 
+
+
+# Create 'binaosnew' based on rank_aosscore and sumaos, similar to SAS logic
+ranked1 <- ranked %>%
+  mutate(
+    binaosnew = if_else(rank_aofscore <= (3 - sumaos) & !is.na(rank_aofscore), 1, NA),  # Adding NA check
+    #binaos = coalesce(binaos, 0),  # Ensure 'binaos' is 0 if NA
+    #binaosnew = coalesce(binaosnew, 0) # ensure binaosnew is 0 if NA 
+  ) %>%
+  select(-binaos)  # Drop 'binaos' column as in SAS
+#this also appears to match SAS 
+
+
+tot = merge(f1, ranked1, by = c("state_fips", "county_fips", "measure_id"), all.x = TRUE)
+
+#tot <- ranked1 %>% 
+ # select(state_fips, county_fips, measure_id, binaosnew, sumaos) %>% 
+ # right_join(f1, by = c("state_fips", "county_fips", "measure_id"))
+
+
+tot = tot %>% mutate(
+    # Handle missing values (replace NA with 0)
+    binaos = coalesce(binaos, 0),
+    binaosnew = coalesce(binaosnew, 0),
+    
+    # Calculate binaos3 based on conditions
+    binaos3 = if_else(binaosnew == 1 & binaos == 1, 1, binaos + binaosnew),
+    
+    # Set binate to NA if both binaosnew and binate are 1
+    binate = if_else(binaosnew == 1 & binate.x == 1, NA, binate.x),
+    binboth = binboth.x
+  ) %>% select(binaos, binaosnew, binaos3, binate, binboth,sumaos,
+               measure_id, state_fips, county_fips)
+
+
+# compare to sas F 
+totsas = haven::read_sas('P:/CH-Ranking/Data/2024/9 Results/Analysis/ateaos/tot_temp.sas7bdat')
+
+totcombo = merge(tot, totsas, by = c("measure_id", "state_fips","county_fips"))
+
+totcombo = totcombo %>% mutate(
+  diffaos = ifelse(is.na(binaos.x) & !is.na(binaos.y) | 
+                  !is.na(binaos.x) & is.na(binaos.y) | 
+                  binaos.x - binaos.y != 0, 1, NA),
+  diffate = ifelse(is.na(binate.x) & !is.na(binate.y) | 
+                  !is.na(binate.x) & is.na(binate.y) | 
+                  binate.x - binate.y != 0, 1, NA)) %>% 
+  select(binaos.x, binaos.y, binate.x, binate.y, diffaos, diffate, 
+         binaos3.x, binaos3.y,
+         binboth.x, binaosnew.x, binaosnew.y, sumaos.x, sumaos.y, 
+         measure_id, state_fips, county_fips) #, binaos1, binate1)
+
+  
+  
+# these are the spots to check!!!! 
+
+uhoh = totcombo %>% filter(diffate == 1 | diffaos ==1) 
+
+uhoh = totcombo %>% filter(binaosnew.x != binaosnew.y)
+
+uhoh = totcombo %>% filter(sumaos.x != sumaos.y)
+
+
+# Step 2: Final cleanup and renaming columns
+totally <- tot %>%
+  #select(-binaos, -binaosnew, -sumaos, -binboth, -rank_aosscore, -needaos) %>%  # Drop unnecessary columns
+  rename(aos = binaos3, ate = binate)  # Rename 'binaos3' to 'aos' and 'binate' to 'ate'
+
+```
+
+```{r comparisons!!!! }
+
+kate = haven::read_sas("P:/CH-Ranking/Data/2024/9 Results/Analysis/ateaos/ateaos_final_kb.sas7bdat")
+
+library(dplyr)
+
+# Get frequency counts for 'aos * measure_id' in 'totally'
+totally_freq <- totally %>%
+  count(aos, measure_id)
+
+# Get frequency counts for 'AOS * measure_id' in 'kate'
+kate_freq <- kate %>%
+  count(AOS, measure_id)
+
+# Get frequency counts for 'ate * measure_id' in 'totally'
+totally_freq_ate <- totally %>%
+  count(ate, measure_id)
+
+# Get frequency counts for 'ATE * measure_id' in 'kate'
+kate_freq_ate <- kate %>%
+  count(ATE, measure_id)
+
+# Rename columns in 'totally' dataset
+hannah <- totally %>%
+  rename(ate_how = ate, aos_how = aos)
+
+
+
+# Merge 'kate' and 'hannah' based on common columns
+compare <- kate %>%
+  left_join(hannah, by = c("state_fips", "county_fips", "measure_id"))
+
+# Create the 'compare_1' dataset with conditional logic for 'matchate' and 'matchaos'
+compare_1 <- compare %>%
+  mutate(
+    matchate = case_when(
+      ATE == 'yes' & ate_how == 1 ~ 'yes',
+      ATE == 'yes' & ate_how == 0 ~ 'no',
+      ATE == 'yes' & is.na(ate_how) ~ 'no',
+      ATE == '' & ate_how == 1 ~ 'no',
+      ATE == '' & ate_how == 0 ~ 'yes',
+      ATE == '' & is.na(ate_how) ~ 'yes',
+      ATE == 'no' & ate_how == 1 ~ 'no',
+      ATE == 'no' & ate_how == 0 ~ 'yes',
+      ATE == 'no' & is.na(ate_how) ~ 'yes',
+      #TRUE ~ matchate
+    ),
+    matchaos = case_when(
+      AOS == 'yes' & aos_how == 1 ~ 'yes',
+      AOS == 'yes' & aos_how == 0 ~ 'no',
+      AOS == 'yes' & is.na(aos_how) ~ 'no',
+      AOS == '' & aos_how == 1 ~ 'no',
+      AOS == '' & aos_how == 0 ~ 'yes',
+      AOS == '' & is.na(aos_how) ~ 'yes',
+      AOS == 'no' & aos_how == 1 ~ 'no',
+      AOS == 'no' & aos_how == 0 ~ 'yes',
+      AOS == 'no' & is.na(aos_how) ~ 'yes',
+      #TRUE ~ matchaos
+    )
+  )
+
+# Get frequency counts for 'matchate' and 'matchaos'
+compare_1_freq <- compare_1 %>%
+  count(matchate, matchaos)
+
+# Sort 'compare_1' by 'matchate' and 'measure_id'
+compare_1_sorted_by_matchate <- compare_1 %>%
+  arrange(matchate, measure_id)
+
+# Print rows where 'matchate' is 'no'
+compare_1 %>%  filter(matchate == 'no')
+
+# Sort 'compare_1' by 'matchaos' and 'measure_id'
+compare_1_sorted_by_matchaos <- compare_1 %>%
+  arrange(matchaos, measure_id)
+
+```
