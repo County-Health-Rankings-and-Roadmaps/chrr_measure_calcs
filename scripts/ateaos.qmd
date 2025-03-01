@@ -8,17 +8,21 @@ Need a single dataset containing: state zscore, national zscore, national median
 
 ```{r load data }
 library(tidyverse)
-tmeasuredata = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/2024 Data/t_measure_data.sas7bdat")
+tmeasuredata = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/2025 Data/t_measure_data.sas7bdat")
 
-# grab the health factors only (ie where category / factor_parent == 2) 
-tfactor = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/t_factor.sas7bdat") %>% filter(year == 2024 & factor_parent == 2) 
+tcategory = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/t_category.sas7bdat") %>% filter(year == 2025)
+
+# grab the "health factors" - term residual from old model 
+# im calling community conditions (32) + societal rules (33) equivalent to health factors; I'm excluding population health and wellbeing (31)
+tfactor = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/t_factor.sas7bdat") %>% filter(year == 2025) %>% 
+  filter(factor_parent %in% c(32,33)) 
 
 
 # grab the focus areas that are health factors 
-tfocus = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/t_focus_area.sas7bdat") %>% filter(year == 2024 & focus_area_parent %in% tfactor$factor_id) %>% select(focus_area_id, focus_area_numerator, focus_area_denominator)
+tfocus = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/t_focus_area.sas7bdat") %>% filter(year == 2025 & focus_area_parent %in% tfactor$factor_id) %>% select(focus_area_id, focus_area_numerator, focus_area_denominator)
 
 # grab the ranked health factors only 
-tmeasure = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/t_measure.sas7bdat") %>% filter(year == 2024 & measure_parent %in% tfocus$focus_area_id & measure_type == 0)
+tmeasure = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/t_measure.sas7bdat") %>% filter(year == 2025 & measure_parent %in% tfocus$focus_area_id & measure_type == 0)
 
 
 # get the focus area weights from tfocus and merge them at the measure level 
@@ -43,9 +47,7 @@ countymeasures = tmeasuredata %>%
 county_summary = countymeasures %>% 
   group_by(measure_id) %>% 
   filter(county_fips != "000" & !is.na(county_fips)) %>% 
-  mutate(nmed = ifelse(measure_id ==9, 0.073, #for 24 only, remove after confirm match 
-                       ifelse(measure_id == 11, 0.245, #for 24 only; remove after confirm match 
-                              median(raw_value, na.rm = TRUE))), 
+  mutate(nmed = median(raw_value, na.rm = TRUE), 
             nstd = sd(raw_value, na.rm = TRUE),
             nmed_other = median(other_data_1, na.rm = TRUE), 
             nstd_other = sd(other_data_1, na.rm = TRUE),
@@ -62,7 +64,7 @@ county_summary = countymeasures %>%
 
 # add in the state rawvalues 
 
-tstate = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/2024 Data/t_state_data.sas7bdat") %>% 
+tstate = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/2025 Data/t_state_data.sas7bdat") %>% 
   rename(srawvalue = raw_value) %>% 
   select(srawvalue, measure_id, state_fips)
 
@@ -110,10 +112,6 @@ score = comp %>%
          aofscore = (focus_area_numerator/ focus_area_denominator)*(weight_numerator/weight_denominator) * aofsz)
 ```
 
-```{r some code to compare w sas }
-score %>% filter(measure_id == 4 & state_fips == "01" & county_fips == "001") %>% select(ntlz, sz, atoez, aofsz, atoecomp, aofscomp, atescore, aofscore)
-```
-
 ```{r handle measures with and without cis }
 
 # get list of measures with CIs 
@@ -147,30 +145,6 @@ bin <- score %>%
       TRUE ~ binaos
     )
   )
-
-
-
-# compare to sas bin 
-binsas = haven::read_sas('P:/CH-Ranking/Data/2024/9 Results/Analysis/ateaos/bin_temp.sas7bdat')
-
-
-
-bincombo = merge(binsas, bin, by = c("measure_id", "state_fips","county_fips"))
-
-bincombo = bincombo %>% mutate(
-  diffaos = ifelse(is.na(binaos.x) & !is.na(binaos.y) | 
-                  !is.na(binaos.x) & is.na(binaos.y) | 
-                  binaos.x - binaos.y != 0, 1, NA),
-  diffate = ifelse(is.na(binate.x) & !is.na(binate.y) | 
-                  !is.na(binate.x) & is.na(binate.y) | 
-                  binate.x - binate.y != 0, 1, NA)) %>% 
-  select(binaos.x, binaos.y, binate.x, binate.y, diffaos, diffate, atescore.x, atescore.y, aosscore, aofscore, atoecomp.x, atoecomp.y, aofscomp.x, aofscomp.y, ci_low.x, ci_high.x)
-
-  
-  
-# these are the spots to check!!!! 
-
-uhoh = bincombo %>% filter(diffate == 1 | diffaos ==1)
 
 ```
 
@@ -224,10 +198,6 @@ prat <- bin %>%
     aosprat = ifelse(is.finite(aosprat), aosprat, NA_real_)
   )
 
-
-
-#quick check 
-# prat %>% filter(state_fips == "09" & measure_id == 4)
 ```
 
 ```{r some more binaos binate }
@@ -263,39 +233,6 @@ f <- prat %>%
     binboth = ifelse(binate == 1 & binaos == 1, 1, NA)
   )
 
-
-
-
-# compare to sas F 
-fsas = haven::read_sas('P:/CH-Ranking/Data/2024/9 Results/Analysis/ateaos/f_temp.sas7bdat')
-
-fcombo = merge(f, fsas, by = c("measure_id", "state_fips","county_fips"))
-
-fcombo = fcombo %>% mutate(
-  diffaos = ifelse(is.na(binaos.x) & !is.na(binaos.y) | 
-                  !is.na(binaos.x) & is.na(binaos.y) | 
-                  binaos.x - binaos.y != 0, 1, NA),
-  diffate = ifelse(is.na(binate.x) & !is.na(binate.y) | 
-                  !is.na(binate.x) & is.na(binate.y) | 
-                  binate.x - binate.y != 0, 1, NA)) %>% 
-  select(binaos.x, binaos.y, binate.x, binate.y, diffaos, diffate, 
-         atoez.x, atoez.y, aofsz.x, aofsz.y, aosprat.x, aosprat.y, 
-         ateprat.x, ateprat.y,
-         measure_id, state_fips, county_fips) #, binaos1, binate1)
-
-  
-  
-# these are the spots to check!!!! 
-
-uhoh = fcombo %>% filter(diffate == 1 | diffaos ==1) %>% 
-  filter(measure_id %in% uhohcodes$measure_id & 
-           state_fips %in% uhohcodes$state_fips & 
-           county_fips %in% uhohcodes$county_fips)
-
-uhohcodes = uhoh %>% select(measure_id, state_fips, county_fips)
-
-
-
 ```
 
 ```{r some more assignment of bins }
@@ -305,46 +242,17 @@ f1 <- f %>%
     binaos = case_when(
       binboth == 1 & sz >= ntlz ~ NA,
       binboth == 1 & sz <= ntlz ~ binaos,
-      binboth == 1 & measure_id %in% c(9, 11) ~ NA,
       TRUE ~ binaos
     ),
     binate = case_when(
-      binboth == 1 & measure_id %in% c(9, 11) ~ 1,
       binboth == 1 & sz <= ntlz ~ NA,
      
       TRUE ~ binate
     ),
     # Handle the special case for measure_id == 124
     binaos = if_else(measure_id == 124, NA, binaos),
-    binate = if_else(measure_id == 124, NA, binate),
-    # Remove binaos for measure_id 9 and 11
-    binaos = if_else(measure_id %in% c(9, 11), NA, binaos)
+    binate = if_else(measure_id == 124, NA, binate)
   )
-
-
-# compare to sas F 
-fsas = haven::read_sas('P:/CH-Ranking/Data/2024/9 Results/Analysis/ateaos/f1_temp.sas7bdat')
-
-fcombo = merge(f1, fsas, by = c("measure_id", "state_fips","county_fips"))
-
-fcombo = fcombo %>% mutate(
-  diffaos = ifelse(is.na(binaos.x) & !is.na(binaos.y) | 
-                  !is.na(binaos.x) & is.na(binaos.y) | 
-                  binaos.x - binaos.y != 0, 1, NA),
-  diffate = ifelse(is.na(binate.x) & !is.na(binate.y) | 
-                  !is.na(binate.x) & is.na(binate.y) | 
-                  binate.x - binate.y != 0, 1, NA)) %>% 
-  select(binaos.x, binaos.y, binate.x, binate.y, diffaos, diffate, 
-         binboth.x, sz.x, ntlz, 
-         measure_id, state_fips, county_fips) #, binaos1, binate1)
-
-  
-  
-# these are the spots to check!!!! 
-
-uhoh = fcombo %>% filter(diffate == 1 | diffaos ==1) 
-
-# consider moving f1 into SAS and then using SAS Code from there 
 
 ```
 
@@ -369,7 +277,7 @@ needaos <- aoscount %>%
 # Merge the f1 dataset with 'needaos' by state_fips and county_fips
 newcount <- f1 %>%
   left_join(needaos, by = c("state_fips", "county_fips")) %>% 
-  filter(!(measure_id %in% c(9,11,124)))
+  filter(measure_id !=124)
 
 
 # Filter counties with needaos == 1 and binaos not equal to 1 (ie missing!!)
@@ -403,10 +311,6 @@ ranked1 <- ranked %>%
 
 tot = merge(f1, ranked1, by = c("state_fips", "county_fips", "measure_id"), all.x = TRUE)
 
-#tot <- ranked1 %>% 
- # select(state_fips, county_fips, measure_id, binaosnew, sumaos) %>% 
- # right_join(f1, by = c("state_fips", "county_fips", "measure_id"))
-
 
 tot = tot %>% mutate(
     # Handle missing values (replace NA with 0)
@@ -423,44 +327,21 @@ tot = tot %>% mutate(
                measure_id, state_fips, county_fips)
 
 
-# compare to sas F 
-totsas = haven::read_sas('P:/CH-Ranking/Data/2024/9 Results/Analysis/ateaos/tot_temp.sas7bdat')
-
-totcombo = merge(tot, totsas, by = c("measure_id", "state_fips","county_fips"))
-
-totcombo = totcombo %>% mutate(
-  diffaos = ifelse(is.na(binaos.x) & !is.na(binaos.y) | 
-                  !is.na(binaos.x) & is.na(binaos.y) | 
-                  binaos.x - binaos.y != 0, 1, NA),
-  diffate = ifelse(is.na(binate.x) & !is.na(binate.y) | 
-                  !is.na(binate.x) & is.na(binate.y) | 
-                  binate.x - binate.y != 0, 1, NA)) %>% 
-  select(binaos.x, binaos.y, binate.x, binate.y, diffaos, diffate, 
-         binaos3.x, binaos3.y,
-         binboth.x, binaosnew.x, binaosnew.y, sumaos.x, sumaos.y, 
-         measure_id, state_fips, county_fips) #, binaos1, binate1)
-
-  
-  
-# these are the spots to check!!!! 
-
-uhoh = totcombo %>% filter(diffate == 1 | diffaos ==1) 
-
-uhoh = totcombo %>% filter(binaosnew.x != binaosnew.y)
-
-uhoh = totcombo %>% filter(sumaos.x != sumaos.y)
 
 
-# Step 2: Final cleanup and renaming columns
+# Final cleanup and renaming columns
 totally <- tot %>%
   #select(-binaos, -binaosnew, -sumaos, -binboth, -rank_aosscore, -needaos) %>%  # Drop unnecessary columns
   rename(aos = binaos3, ate = binate)  # Rename 'binaos3' to 'aos' and 'binate' to 'ate'
+
+
+write.csv(totally, file = "P:/CH-Ranking/Data/2025/9 Results/Analysis/ateaos/how_ate_aos.csv", row.names = FALSE)
 
 ```
 
 ```{r comparisons!!!! }
 
-kate = haven::read_sas("P:/CH-Ranking/Data/2024/9 Results/Analysis/ateaos/ateaos_final_kb.sas7bdat")
+kate = haven::read_sas("P:/CH-Ranking/Data/2025/9 Results/Analysis/ateaos/kb_ate_aos.sas7bdat")
 
 library(dplyr)
 
@@ -489,6 +370,13 @@ hannah <- totally %>%
 # Merge 'kate' and 'hannah' based on common columns
 compare <- kate %>%
   left_join(hannah, by = c("state_fips", "county_fips", "measure_id"))
+
+
+# Find rows in 'kate' that do not have a match in 'hannah'
+unmerged_rows <- hannah %>%
+  anti_join(kate, by = c("state_fips", "county_fips", "measure_id"))
+
+
 
 # Create the 'compare_1' dataset with conditional logic for 'matchate' and 'matchaos'
 compare_1 <- compare %>%
