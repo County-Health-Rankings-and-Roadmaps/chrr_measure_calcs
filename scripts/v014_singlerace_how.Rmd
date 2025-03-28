@@ -1,0 +1,378 @@
+---
+title: "v014_singlerace"
+author: "Hannah Olson-Williams"
+output: html_document
+---
+
+All birth data is saved locally on my C drive because it comes from NCHS. 
+
+Load population data 
+```{r}
+d23 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/asrh/cc-est2023-alldata.csv")
+
+d22 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2020-2022/counties/asrh/cc-est2022-all.csv")
+
+d21 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2020-2021/counties/asrh/cc-est2021-all.csv")
+
+d20 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2010-2020/counties/asrh/CC-EST2020-ALLDATA.csv")
+
+d19 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/asrh/cc-est2019-alldata.csv")
+
+d18 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2010-2018/counties/asrh/cc-est2018-alldata.csv")
+
+d17 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2010-2017/counties/asrh/cc-est2017-alldata.csv")
+
+
+```
+
+We need all females between ages 15 and 19 
+
+```{r}
+library(tidyverse)
+df = list(d17, d18, d19, d20, d21, d22, d23)
+dff = lapply(df, function(x) x %>% filter(AGEGRP == 4, YEAR == max(YEAR, na.rm = TRUE)) %>% 
+               select(NHWA_FEMALE, NHBA_FEMALE, NHIA_FEMALE, NHAA_FEMALE, NHNA_FEMALE, NHTOM_FEMALE, H_FEMALE, 
+                      STATE, COUNTY))
+
+# fix connecticut for 2022 and 2023: set ct pop values for 2022 and 2023 to be equal to ct vals in 2021 
+ct21 = dff[[5]] %>% filter(STATE == 9) #get vals from 2021 
+dff[[6]] = rbind(dff[[6]] %>% filter(STATE != 9), ct21) #replace for 2022 
+dff[[7]] = rbind(dff[[7]] %>% filter(STATE != 9), ct21) #replace for 2023 
+
+
+
+#get state level value for CT from 2022 
+# this is the current cause of differences w ganhua - he used the 2022 data to calc a state value for CT while i did not...
+ct22= d22 %>% filter(AGEGRP == 4, YEAR == max(YEAR, na.rm = TRUE), STATE ==9) %>% 
+               select(TOT_FEMALE, STATE, COUNTY) %>% summarize(TOT_FEMALE = sum(TOT_FEMALE))
+
+ct23= d23 %>% filter(AGEGRP == 4, YEAR == max(YEAR, na.rm = TRUE), STATE ==9) %>% 
+               select(TOT_FEMALE, STATE, COUNTY) %>% summarize(TOT_FEMALE = sum(TOT_FEMALE))
+
+
+#fix some old fipscodes 
+dfff = lapply(dff, function(x) mutate(x, COUNTY = case_when(
+      STATE ==46 & COUNTY ==113 ~102,
+      STATE ==2 & COUNTY ==270 ~158,
+      STATE ==51 & COUNTY ==515 ~019,
+      TRUE ~ COUNTY
+      )))
+
+
+
+dffff = lapply(dfff, function(x) x %>% pivot_longer(cols = NHWA_FEMALE: H_FEMALE, 
+                                                  values_to = "pop",
+                                                  names_to = "race"))
+
+
+dftot = dffff %>% reduce(full_join, by = c("STATE", "COUNTY", "race")) 
+dftot = data.frame(dftot)
+dftot[4:10] <- sapply(dftot[4:10],as.numeric)
+
+
+
+dftot$STATE = stringr::str_pad(dftot$STATE, width = 2, side = "left", pad = "0")
+dftot$COUNTY = stringr::str_pad(dftot$COUNTY, width = 3, side = "left", pad = "0")
+
+
+
+dftot$popsums = rowSums(dftot[4:10], na.rm = TRUE)
+
+dfn= dftot %>% select("STATE", "COUNTY", "race", "popsums") 
+
+
+
+# dfn$race = factor(dfn$race, levels = c("NHWA_FEMALE", "NHBA_FEMALE", "NHIA_FEMALE", "NHAA_FEMALE", "NHNA_FEMALE", "H_FEMALE"), labels = c(1,2,3,4,4,8))
+
+
+```
+
+
+
+```{r}
+
+
+dfn = dfn %>% group_by(STATE, COUNTY, race) %>% 
+summarise(pop = sum(popsums, na.rm = TRUE))
+```
+
+
+
+
+Now we need state and national sums 
+
+```{r}
+dst = dfn %>% group_by(STATE, race) %>% 
+  summarise(pop = sum(pop, na.rm = TRUE))
+dst$COUNTY = "000"
+
+dntl = dfn %>% group_by(race) %>% 
+  summarise(pop = sum(pop, na.rm = TRUE))
+dntl$COUNTY = "000" 
+dntl$STATE = "00"
+
+
+pop_how = rbind(dst, dntl, dfn)
+
+
+pop_how$racerecode = ifelse(pop_how$race == "NHWA_FEMALE", "white",
+                            ifelse(pop_how$race == "NHBA_FEMALE", "black",
+                                   ifelse(pop_how$race == "NHIA_FEMALE", "aian",
+                                          ifelse(pop_how$race == "NHAA_FEMALE", "asian",
+                                                 ifelse(pop_how$race == "H_FEMALE", "hispanic",
+                                                        ifelse(pop_how$race == "NHNA_FEMALE", "nhopi", 
+                                                        ifelse(pop_how$race == "NHTOM_FEMALE", "tom", NA)))))))
+
+
+```
+
+
+# Now load the NCHS births data 
+
+```{r}
+
+nat17 = readr::read_fwf("E:/CHRR/natality raw/rawdata/NATL2017US.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat18 = readr::read_fwf("E:/CHRR/natality raw/rawdata/NATL2018US.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat19 = readr::read_fwf("E:/CHRR/natality raw/rawdata/nat2019us.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat20 = readr::read_fwf("E:/CHRR/natality raw/rawdata/NATL2020us.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat21 = readr::read_fwf("E:/CHRR/natality raw/rawdata/nat2021us.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat22 = readr::read_fwf("E:/CHRR/natality raw/rawdata/NATL2022US.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat23 = readr::read_fwf("E:/CHRR/natality raw/rawdata/nat2023us.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat = list(nat17, nat18, nat19, nat20, nat21, nat22, nat23)
+
+#remove births with mother's residence American Samoa, Guam, Northern Marianas, Puerto Rico, Virgin Islands, not applicable, and not classified ; remove non teen births 
+natff = lapply(nat, function(x) x %>% filter(mage == 2) %>% filter(!(state %in% c("AS", "GU", "MP", "PR", "VI", "XX", "ZZ", "AB", "BC", "MB", "NB", "ON", "QC", "SK", "ZZ")) & !(county_fips %in% c("000", "999"))) %>% mutate(birth = 1))
+
+
+#fix some old fipscodes 
+natfff = lapply(natff, function(x) mutate(x, county_fips = case_when(
+      state =="SD" & county_fips =="113" ~"102",
+      state == "AK" & county_fips == "270" ~"158",
+      state =="VA" & county_fips == "515" ~"019",
+      TRUE ~ county_fips
+      )))
+
+
+
+
+natfsum = lapply(natfff, function(x) x %>% group_by(state, county_fips, mracehisp) %>% summarise(tbirth = sum(birth)))
+
+nattot = natfsum %>% reduce(full_join, by = c("state", "county_fips", "mracehisp")) 
+nattot = data.frame(nattot)
+nattot[4:10] <- sapply(nattot[4:10],as.numeric)
+
+
+
+nattot$birthsums = rowSums(nattot[4:10], na.rm = TRUE)
+
+#get state codes with abbrevs 
+state = tigris::fips_codes %>% select(state, state_code) %>% distinct()
+
+nats = merge(nattot, state, by = "state")
+
+
+
+natn= nats %>% filter(state != "VI") %>% select("state_code", "county_fips", "mracehisp", "birthsums") 
+
+
+
+```
+
+
+
+```{r}
+
+
+
+statesums = natn %>% group_by(state_code, mracehisp) %>% 
+  summarise(birthsums = sum(birthsums, na.rm = TRUE))
+statesums$county_fips = "000"
+
+natsum = natn %>% group_by(mracehisp) %>% 
+  summarise(birthsums = sum(birthsums, na.rm = TRUE))
+natsum$state_code = "00" 
+natsum$county_fips = "000"
+
+natall = rbind(natn, statesums, natsum)
+
+
+natall$birthsums = ifelse(natall$birthsums < 10, NA, natall$birthsums)
+
+natall$racerecode = ifelse(natall$mracehisp == 1, "white", 
+                           ifelse(natall$mracehisp == 2, "black",
+                           ifelse(natall$mracehisp == 3, "aian",
+                            ifelse(natall$mracehisp == 4, "asian",
+                            ifelse(natall$mracehisp == 5, "nhopi",
+                            ifelse(natall$mracehisp == 6, "tom",
+                            ifelse(natall$mracehisp == 7, "hispanic", "")))))))
+
+
+```
+
+Now create the final dataset and calculate rates 
+
+
+```{r}
+
+bp = merge(natall, pop_how, by.y = c("STATE", "COUNTY", "racerecode"), by.x = c("state_code", "county_fips", "racerecode"), all.x = TRUE)
+
+
+bp$rate = bp$birthsums/ bp$pop*1000
+
+#calculate poisson CIs
+#doing exactly same way as ganhua...not totally sure i understand yet 
+
+alo = (1-0.95)/2
+ahi = (0.95 + 1)/2
+
+dpoi = data.frame(n = 1:99)
+for (i in 1:length(dpoi$n)) { 
+dpoi$l = qgamma(alo, dpoi$n)/dpoi$n
+dpoi$u = qgamma(ahi, dpoi$n+1)/dpoi$n
+}
+
+
+bpc = bp %>% 
+  mutate(rse = 100*(sqrt(1/birthsums)), 
+         stde = rate*rse/100,
+         lci = ifelse(birthsums >= 100, rate - 1.96*stde, NA),
+         uci = ifelse(birthsums >= 100, rate + 1.96*stde, NA))
+
+
+bpp = merge(bpc, dpoi, by.x = "birthsums", by.y = "n", all.x = TRUE)
+
+bpp$lci = ifelse(is.na(bpp$lci), bpp$l * bpp$rate, bpp$lci)
+bpp$uci = ifelse(is.na(bpp$uci), bpp$u * bpp$rate, bpp$uci)
+
+
+bpw = bpp %>% select(state_code, county_fips, racerecode, birthsums, pop, rate, lci, uci) %>% 
+  pivot_wider(id_cols = c("state_code", "county_fips"), names_from = racerecode, values_from = c(birthsums, pop, rate, lci, uci))
+#im intentionally leaving my column names this way so I can more easily compare with Ganhua 
+
+# add back original fipscodes 
+
+cf = haven::read_sas("P:/CH-Ranking/Data/2025/2 Cleaned data ready for Calculation or Verification/county_fips_with_ct_old.sas7bdat")
+sf = haven::read_sas("P:/CH-Ranking/Data/2025/2 Cleaned data ready for Calculation or Verification/state_fips.sas7bdat")
+sf = sf %>% select(statecode, countycode)
+cf = cf %>% select(statecode, countycode)
+fips = rbind(sf, cf)
+
+how = merge(fips, bpw, by.x = c("statecode", "countycode"), by.y = c("state_code", "county_fips"), all.x = TRUE)
+how$fips = paste0(how$statecode, how$countycode)
+```
+
+
+Now compare with ganhua 
+
+
+```{r}
+#ganhua's final dataset
+glu = haven::read_sas("P:/CH-Ranking/Data/2025/3 Data calculated needs checking/v014_otherdata.sas7bdat")
+glu$fips = paste0(glu$statecode, glu$countycode)
+
+
+# compare rates 
+gsub = glu %>% select(!contains(c("cilow", "cihigh", "code")))
+
+hsub = how %>% select(contains(c("fips", "rate")))
+
+gh = merge(gsub, hsub, by = "fips")
+gh$diff_black = gh$rate_black - gh$v014_race_black
+gh$diff_white = gh$rate_white - gh$v014_race_white
+gh$diff_aian = gh$rate_aian - gh$v014_race_aian
+gh$diff_asian = gh$rate_asian - gh$v014_race_asian
+gh$diff_hispanic = gh$rate_hispanic - gh$v014_race_hispanic
+gh$diff_nhopi = gh$rate_nhopi - gh$v014_race_nhopi
+gh$diff_tom = gh$rate_tom - gh$v014_race_tom
+
+
+
+sapply(gh, summary) 
+
+temp = gh %>% filter(diff_hispanic > 0.001 | diff_black > 0.001 | 
+                       diff_white > 0.001 | diff_aian > 0.001 |
+                       diff_asian > 0.001 | diff_nhopi > 0.001 | 
+                       diff_tom > 0.001)
+
+miss = gh %>% filter(is.na(v014_race_aian)& !is.na(rate_aian) |
+                       !is.na(v014_race_aian)& is.na(rate_aian))
+  
+  
+####################################################
+# compare lci 
+gsub = glu %>% select(contains(c("cilow", "fips")))
+
+hsub = how %>% select(contains(c("fips", "lci")))
+
+ghlci = merge(gsub, hsub, by = "fips")
+ghlci$diff_black = ghlci$lci_black - ghlci$v014_race_black_cilow
+ghlci$diff_white = ghlci$lci_white - ghlci$v014_race_white_cilow
+ghlci$diff_aian= ghlci$lci_aian - ghlci$v014_race_aian_cilow
+ghlci$diff_asian = ghlci$lci_asian - ghlci$v014_race_asian_cilow
+ghlci$diff_hispanic = ghlci$lci_hispanic - ghlci$v014_race_hispanic_cilow
+ghlci$diff_tom = ghlci$lci_tom - ghlci$v014_race_tom_cilow
+ghlci$diff_nhopi = ghlci$lci_nhopi - ghlci$v014_race_nhopi_cilow
+
+
+sapply(ghlci, summary)
+#match ! 
+
+temp = ghlci %>% filter(diff_hispanic > 0.001 | diff_black > 0.001 | 
+                       diff_white > 0.001 | diff_aian > 0.001 |
+                       diff_asian > 0.001 | diff_nhopi > 0.001 | 
+                       diff_tom > 0.001)
+
+
+
+
+#####################################################
+#compare uci 
+gsub = glu %>% select(contains(c("cihigh", "fips"))) 
+
+hsub = how %>% select(contains(c("fips", "uci"))) 
+
+ghuci = merge(gsub, hsub, by = "fips")
+ghuci$diff_black = ghuci$uci_black - ghuci$v014_race_black_cihigh
+ghuci$diff_white = ghuci$uci_white - ghuci$v014_race_white_cihigh
+ghuci$diff_aian = ghuci$uci_aian - ghuci$v014_race_aian_cihigh
+ghuci$diff_asian = ghuci$uci_asian - ghuci$v014_race_asian_cihigh
+ghuci$diff_hispanic = ghuci$uci_hispanic - ghuci$v014_race_hispanic_cihigh
+
+sapply(ghuci, summary)
+
+#match! 
+
+
+# lowfips_white = how$fips[how$totbirth_white < 100]
+# 
+# summary(ghuci$uci_white[!(ghuci$fips %in% lowfips_white)])
+# summary(ghuci$v014_race_white_cihigh[!(ghuci$fips %in% lowfips_white)])
+# 
+
+write.csv(how, "P:/CH-Ranking/Data/2025/3 Data calculated needs checking/Hannah datasets/v014_singlerace_how.csv")
+
+# save to project 
+
+write.csv(how, "~/chrr_measure_calcs/duplicated_data/v014_singlerace_how.csv")
+
+```
+
+
+
+
+
+

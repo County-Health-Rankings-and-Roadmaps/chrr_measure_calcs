@@ -1,0 +1,244 @@
+---
+title: "Inconsistencies Found Between Tract-Level and County-Level Race-Specific Household Data for 2019-2023 ACS"
+execute: 
+  echo: false
+  warning: false
+  message: false
+  error: false
+format: pdf
+editor: visual
+---
+
+```{r set up using tidycensus for all races}
+knitr::opts_chunk$set(
+  echo = FALSE,     # Hide code
+  warning = FALSE,  # Suppress warnings
+  message = FALSE   # Suppress messages
+)
+
+library(tidyverse)
+library(tidycensus)
+
+# Define the ACS variables for race-specific household values 
+acs_vars <- c("B11002A_001", "B11002B_001", "B11002C_001",
+              "B11002D_001", "B11002E_001", "B11002F_001",
+              "B11002G_001", "B11002H_001", "B11002I_001",
+              "B11002_001")
+
+# Define the ACS year and survey
+acs_year <- 2023  # Update as needed
+acs_survey <- "acs5"
+
+# Get data at the Census Tract level
+tract_data23 <- tidycensus::get_acs(geography = "tract", 
+                      variables = acs_vars, 
+                      year = acs_year, 
+                      survey = acs_survey, 
+                      state = "NY", 
+                      geometry = FALSE) %>%
+  mutate(level = "tract")
+
+# Get data at the County level
+county_data <- tidycensus::get_acs(geography = "county", 
+                       variables = acs_vars, 
+                       year = acs_year, 
+                       survey = acs_survey, 
+                       state = "NY", 
+                       geometry = FALSE) %>%
+  mutate(level = "county")
+
+# Extract state and county codes from the GEOID for easier merging later
+county_data$statecode = substring(county_data$GEOID, 1,2)
+county_data$countycode = substring(county_data$GEOID, 3,5)
+tract_data23$statecode = substring(tract_data23$GEOID, 1,2)
+tract_data23$countycode = substring(tract_data23$GEOID, 3,5)
+
+# Group tract data by state and county, adding the count of tracts per county
+tract_data23 = tract_data23 %>% group_by(statecode, countycode, variable) %>% 
+  mutate(ntracts = n())
+
+# Summarize tract-level data by county to get the sum of race-specific household values
+counties_from_tracts <- tract_data23 %>%
+  group_by(statecode, countycode, variable) %>%
+  summarize(estimate = sum(estimate, na.rm = TRUE))
+
+# Merge the summarized tract-level data with county-level data to compare the values
+both = merge(counties_from_tracts, county_data, by = c("statecode", "countycode", "variable"))
+
+# Calculate the difference between tract sum and county value
+both$diff = both$estimate.x - both$estimate.y
+```
+
+
+
+
+```{r print a nice table of race-specific tract v county differences }
+
+library(dplyr)
+library(stringr)
+
+
+# Clean and restructure data to make it easier to understand
+cleaned_data <- both %>%
+  rename(County_value = estimate.y, 
+         Sum_of_tracts = estimate.x) %>%
+  select(-level) %>%
+  mutate(Race = case_when(
+    str_sub(variable, -5, -5) == "A" ~ "White Alone",
+    str_sub(variable, -5, -5) == "B" ~ "Black Alone",
+    str_sub(variable, -5, -5) == "C" ~ "AIAN Alone",
+    str_sub(variable, -5, -5) == "D" ~ "Asian Alone",
+    str_sub(variable, -5, -5) == "E" ~ "NHOPI Alone",
+    str_sub(variable, -5, -5) == "F" ~ "Other",
+    str_sub(variable, -5, -5) == "G" ~ "Two or More",
+    str_sub(variable, -5, -5) == "H" ~ "Non Hispanic White",
+    str_sub(variable, -5, -5) == "I" ~ "Hispanic",
+    !str_sub(variable, -5, -5) %in% c("A","B","C","D","E","F","G", "H", "I") ~ "Total",
+    TRUE ~ NA_character_  # Default to NA if no match is found
+  )) %>%
+  select(GEOID, Race, County_value, Sum_of_tracts, diff)  # Reorder columns
+
+
+# Filter data to show only rows where there is a difference in values
+subset_data <- cleaned_data %>% filter(diff != 0) 
+
+library(gt)
+# Create a table using gt
+gt_table <- subset_data %>%
+  gt() %>%
+  tab_header(
+    title = "Counties where tract sums do not equal county values"
+  )  %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels() # Bold the first column header
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "#f2f2f2"),
+    locations = cells_column_labels() # Color the first column header
+  ) %>%
+  cols_label(
+    #NAME = "County Name", # Change column names if needed
+    Sum_of_tracts = "Sum of tract values", 
+    diff = "Difference",
+    County_value = "County value"
+  ) %>% 
+   tab_row_group(
+    group = "Suffolk County",
+    rows = which(subset_data$GEOID == 36103)  # Apply style to header row
+  ) %>%
+  tab_row_group(
+    group = "Ulster County",
+    rows = which(subset_data$GEOID == 36111)
+  ) 
+# Print the table
+gt_table
+
+```
+
+```{r grab data from 2022 and 2021 acs tables to compare n tracts }
+
+
+acs_vars <- c("B11002A_001", "B11002B_001", "B11002C_001",
+              "B11002D_001", "B11002E_001", "B11002F_001",
+              "B11002G_001", "B11002H_001", "B11002I_001")
+
+# Define the ACS year and survey
+acs_year <- 2022  # Update as needed
+acs_survey <- "acs5"
+
+# Get data at the Census Tract level
+tract_data22 <- tidycensus::get_acs(geography = "tract", 
+                      variables = acs_vars, 
+                      year = acs_year, 
+                      survey = acs_survey, 
+                      state = "NY", 
+                      geometry = FALSE) %>%
+  mutate(level = "tract")
+
+# Get data at the Census Tract level
+tract_data21 <- tidycensus::get_acs(geography = "tract", 
+                      variables = acs_vars, 
+                      year = 2021, 
+                      survey = acs_survey, 
+                      state = "NY", 
+                      geometry = FALSE) %>%
+  mutate(level = "tract")
+
+# Get data at the County level
+county_data <- tidycensus::get_acs(geography = "county", 
+                       variables = acs_vars, 
+                       year = acs_year, 
+                       survey = acs_survey, 
+                       state = "NY", 
+                       geometry = FALSE) %>%
+  mutate(level = "county")
+
+county_data$statecode = substring(county_data$GEOID, 1,2)
+county_data$countycode = substring(county_data$GEOID, 3,5)
+tract_data22$statecode = substring(tract_data22$GEOID, 1,2)
+tract_data22$countycode = substring(tract_data22$GEOID, 3,5)
+tract_data22 = tract_data22 %>% group_by(statecode, countycode, variable) %>% 
+  mutate(ntracts = n()) 
+
+tract_data21$statecode = substring(tract_data21$GEOID, 1,2)
+tract_data21$countycode = substring(tract_data21$GEOID, 3,5)
+tract_data21 = tract_data21 %>% group_by(statecode, countycode, variable) %>% 
+  mutate(ntracts = n())
+
+
+
+
+counties_from_tracts <- tract_data22 %>%
+  group_by(statecode, countycode, variable) %>%
+  summarize(estimate = sum(estimate, na.rm = TRUE))
+
+
+both = merge(counties_from_tracts, county_data, by = c("statecode", "countycode", "variable"))
+
+both$diff = both$estimate.x - both$estimate.y
+
+
+# Process the data to calculate differences in the number of tracts over the years
+td22 = tract_data22 %>% select(statecode, countycode, ntracts) %>% distinct() %>% rename(ntracts22 = ntracts)
+
+td21 = tract_data21 %>% select(statecode, countycode, ntracts) %>% distinct() %>% rename(ntracts21 = ntracts)
+
+td23 = tract_data23 %>% select(statecode, countycode, ntracts) %>% distinct() %>% rename(ntracts23 = ntracts)
+
+tot1 = merge(td22,td21,by=c("statecode", "countycode"))
+totntracts = merge(tot1, td23, by = c("statecode", "countycode"))
+
+totnamed = merge(totntracts, county_data, by = c("statecode", "countycode")) %>% 
+  select(GEOID, NAME, ntracts21, ntracts22, ntracts23) %>% distinct()
+
+misstracts_gtable = totnamed %>% filter(ntracts21 != ntracts22 | 
+                        ntracts22 != ntracts23 | 
+                        ntracts21 != ntracts23) %>% 
+  mutate(diff = ntracts22 - ntracts23) %>%
+  select(NAME, 
+         `N tracts 2021` = ntracts21, 
+         `N tracts 2022` = ntracts22, 
+         `N tracts 2023` = ntracts23, 
+         `Diff N tracts` = diff) %>%
+  gt() %>%
+  tab_spanner(
+    label = "Total tracts", 
+    columns = vars(`N tracts 2021`, `N tracts 2022`, `N tracts 2023`)
+  ) 
+
+misstracts_gtable
+```
+
+
+```{r get the GEOIDs of the missing tracts }
+
+geoid_misstracts = tract_data22 %>%
+  ungroup() %>%
+  distinct(GEOID) %>%
+  anti_join(
+    tract_data23,
+    by = join_by(GEOID) 
+  ) %>% gt()
+```
+

@@ -1,0 +1,697 @@
+---
+title: "After the Clusters analysis" 
+format: html
+editor: visual
+---
+
+```{r some set up}
+prevyear <- 2025
+thisyear <- 2025
+
+# Set file paths
+
+oldyear <- paste0("P:/CH-Ranking/Data/Cumulative Analytic Datasets/", prevyear, " Data/")
+fips <- paste0("P:/CH-Ranking/Data/", thisyear, "/2 Cleaned Data ready for Calculation or Verification")
+newyear <- paste0("P:/CH-Ranking/Data/Cumulative Analytic Datasets/", thisyear, " Data/")
+
+# Load necessary libraries
+library(data.table)
+library(tidyverse)
+
+# Getting all the analytic files loaded
+
+# Datasets available in the cumulative file for each year:
+# t_measure
+# t_focus_area
+# t_factor
+# t_category
+
+statesnew = haven::read_sas(paste0(newyear, "t_state_data.sas7bdat"))
+statesold = haven::read_sas(paste0(oldyear, "t_state_data.sas7bdat"))
+
+measuresnew <- haven::read_sas(paste0(newyear, "t_measure_data.sas7bdat"))
+categoriesnew <- haven::read_sas(paste0(newyear, "t_category_data.sas7bdat"))
+
+measuredes = haven::read_sas("P:/CH-Ranking/Data/Cumulative Analytic Datasets/t_measure.sas7bdat")
+
+cfips = haven::read_sas(paste0(fips, "/county_fips.sas7bdat"))
+sfips = haven::read_sas(paste0(fips, "/state_fips.sas7bdat")) %>% filter(statecode != "00")
+
+
+glpath = "P:/CH-Ranking/Data/2025/9 Results/Analysis/After the Rankings Analysis/EB Analysis Files/"
+
+resultspath = "P:/CH-Ranking/Data/2025/9 Results/Analysis/After the Rankings Analysis/HOW Analysis Files/"
+```
+
+```{r unclustered counties}
+unclust = measuresnew %>% 
+  filter(county_ranked == 0) %>% 
+  select(state_fips, county_fips) %>% 
+  distinct()
+
+unclustd = merge(cfips, unclust, by.x = c("statecode", "countycode"), by.y = c("state_fips", "county_fips"), all.y = TRUE)
+
+#compare w gl 
+gl = haven::read_sas(paste0(glpath, "unclustered_counties.sas7bdat"))
+
+setdiff(gl$fipscode, unclustd$fipscode)
+```
+
+```{r clustered-unclustered}
+cu = measuresnew %>% group_by(state_fips) %>% 
+  filter(state_fips != "00") %>% 
+  summarise("N Clustered Counties" = n_distinct(county_fips[county_ranked == 1]),
+         "N Unclustered Counties" = n_distinct(county_fips[county_ranked == 0])) 
+
+
+cus = merge(cu, sfips, by.x = "state_fips", by.y = "statecode", all.y=TRUE)
+
+#compare w gl 
+gl = haven::read_sas(paste0(glpath, "total_clustered_unclustered.sas7bdat"))
+
+
+summary(gl$clustered_counties)
+
+summary(cus$`N Clustered Counties`)
+
+summary(gl$unclustered_counties)
+
+summary(cus$`N Unclustered Counties`)
+```
+
+```{r HO HF distributions}
+#n counties in each ho/hf cluster nationally
+categoriesnew$fips = paste0(categoriesnew$state_fips, categoriesnew$county_fips)
+
+hohfdist = categoriesnew %>% 
+  filter(county_fips != "000") %>% 
+  group_by(health_group) %>% 
+  filter(!is.na(health_group)) %>% 
+  summarise(ho_num = n_distinct(fips[category_id == 31]), #31 is pop health and well being (outcomes) 
+            ho_zscore_min = min(z_score[category_id == 31], na.rm = TRUE),
+            ho_zscore_max = max(z_score[category_id == 31], na.rm = TRUE),
+            
+            hf_num = n_distinct(fips[category_id == 32]), #32 is community conditions (factors) 
+            hf_zscore_min = min(z_score[category_id == 32], na.rm = TRUE),
+            hf_zscore_max = max(z_score[category_id == 32], na.rm = TRUE)) #2 is health factors 
+
+
+#compare with gl 
+gl = haven::read_sas(paste0(glpath, "ho_hf_cluster_distribution_us.sas7bdat"))
+# only 6x7 so checked by eye 
+
+```
+
+```{r ho and hf distributions by state }
+# number of counties in each ho or hf cluster for each state 
+
+ho_bystate = categoriesnew %>% 
+  filter(county_fips != "000") %>% 
+  group_by(state_fips, health_group) %>% 
+  filter(category_id == 31) %>% 
+  summarise("ho num" = n_distinct(county_fips))
+
+hf_bystate = categoriesnew %>% 
+  filter(county_fips != "000") %>% 
+  group_by(state_fips, health_group) %>% 
+  filter(category_id == 32) %>% 
+  summarise("hf num" = n_distinct(county_fips))
+
+
+#compare with gl 
+gl = haven::read_sas(paste0(glpath, "ho_cluster_distribution_by_st.sas7bdat"))
+
+summary(gl$ho_cluster2025)
+summary(ho_bystate$health_group)
+
+summary(gl$num_counties)
+summary(ho_bystate %>% filter(!is.na(health_group)) %>% select(`ho num`))
+
+
+
+
+#compare with gl 
+gl = haven::read_sas(paste0(glpath, "hf_cluster_distribution_by_st.sas7bdat"))
+
+summary(gl$hf_cluster2025)
+summary(hf_bystate$health_group)
+
+summary(gl$num_counties)
+summary(hf_bystate %>% filter(!is.na(health_group)) %>% select(`hf num`))
+
+```
+
+```{r top ho in US }
+#list of counties in top ho cluster (cluster 1)
+
+topho = categoriesnew %>% 
+  filter(county_fips != "000") %>% 
+  filter(category_id == 31 & health_group == 1) %>% 
+  select(state_fips, county_fips)
+
+tophoc = merge(topho, cfips, by.x = c("state_fips", "county_fips"),
+               by.y = c("statecode", "countycode"))
+
+#compare with gl 
+gl = haven::read_sas(paste0(glpath, "ho_top_cluster_us.sas7bdat"))
+
+setdiff(gl$county, tophoc$county)
+```
+
+```{r top hf in US }
+#list of counties in top hf cluster (cat 2)
+
+tophf = categoriesnew %>% 
+  filter(county_fips != "000") %>% 
+  filter(category_id == 32 & health_group == 1) %>% 
+  select(state_fips, county_fips)
+
+tophfc = merge(tophf, cfips, by.x = c("state_fips", "county_fips"),
+               by.y = c("statecode", "countycode"))
+
+#compare with gl 
+gl = haven::read_sas(paste0(glpath, "hf_top_cluster_us.sas7bdat"))
+
+setdiff(gl$county, tophfc$county)
+
+```
+
+```{r top ho by state }
+#list of counties in top ho cluster (not always cluster 1) in each state
+
+topho_state = categoriesnew %>% 
+  filter(county_fips != "000") %>% 
+  filter(category_id == 31) %>% 
+  group_by(state_fips) %>% 
+  filter(health_group == min(health_group, na.rm = TRUE)) %>% 
+  select(state_fips, county_fips, health_group)
+
+topho_statec = merge(topho_state, cfips, by.x = c("state_fips", "county_fips"),
+               by.y = c("statecode", "countycode"))
+
+#compare with GL 
+gl = haven::read_sas(paste0(glpath, "ho_top_cluster_by_state.sas7bdat"))
+
+setdiff(gl$county, topho_statec$county)
+
+summary(gl$ho_cluster2025)
+summary(topho_statec$health_group)
+
+```
+
+```{r top hf by state }
+#list of counties in top hf cluster (not always cluster 1) in each state
+
+tophf_state = categoriesnew %>% 
+  filter(county_fips != "000") %>% 
+  filter(category_id == 32) %>% 
+  group_by(state_fips) %>% 
+  filter(health_group == min(health_group, na.rm = TRUE)) %>% 
+  select(state_fips, county_fips, health_group)
+
+tophf_statec = merge(tophf_state, cfips, by.x = c("state_fips", "county_fips"),
+               by.y = c("statecode", "countycode"))
+
+#compare with GL 
+gl = haven::read_sas(paste0(glpath, "hf_top_cluster_by_state.sas7bdat"))
+
+setdiff(gl$county, tophf_statec$county)
+
+summary(gl$hf_cluster2025)
+summary(tophf_statec$health_group)
+
+```
+
+```{r bottom ho in US }
+#list of counties in bottom ho cluster (cluster 10)
+
+bottomho = categoriesnew %>% 
+  filter(county_fips != "000") %>% 
+  filter(category_id == 31 & health_group == 10) %>% 
+  select(state_fips, county_fips)
+
+bottomhoc = merge(bottomho, cfips, by.x = c("state_fips", "county_fips"),
+               by.y = c("statecode", "countycode"))
+
+#compare with gl 
+gl = haven::read_sas(paste0(glpath, "ho_bottom_cluster_us.sas7bdat"))
+
+setdiff(gl$county, bottomhoc$county)
+```
+
+```{r bottom hf in US }
+#list of counties in bottom hf cluster (cluster 10)
+
+bottomhf = categoriesnew %>% 
+  filter(county_fips != "000") %>% 
+  filter(category_id == 32 & health_group == 10) %>% 
+  select(state_fips, county_fips)
+
+bottomhfc = merge(bottomhf, cfips, by.x = c("state_fips", "county_fips"),
+               by.y = c("statecode", "countycode"))
+
+#compare with gl 
+gl = haven::read_sas(paste0(glpath, "hf_bottom_cluster_us.sas7bdat"))
+
+setdiff(gl$county, bottomhfc$county)
+```
+
+```{r bottom hf by state }
+#list of counties in bottom hf cluster (not always cluster 10) in each state
+
+bottomhf_state = categoriesnew %>% 
+  filter(county_fips != "000") %>% 
+  filter(category_id == 32) %>% 
+  group_by(state_fips) %>% 
+  filter(health_group == max(health_group, na.rm = TRUE)) %>% 
+  select(state_fips, county_fips, health_group)
+
+bottomhf_statec = merge(bottomhf_state, cfips, by.x = c("state_fips", "county_fips"),
+               by.y = c("statecode", "countycode"))
+
+#compare with GL 
+gl = haven::read_sas(paste0(glpath, "hf_bottom_cluster_by_state.sas7bdat"))
+
+setdiff(gl$county, bottomhf_statec$county)
+
+summary(gl$hf_cluster2025)
+summary(bottomhf_statec$health_group)
+
+```
+
+```{r bottom ho by state }
+#list of counties in bottom ho cluster (not always cluster 10) in each state
+
+bottomho_state = categoriesnew %>% 
+  filter(county_fips != "000") %>% 
+  filter(category_id == 31) %>% 
+  group_by(state_fips) %>% 
+  filter(health_group == max(health_group, na.rm = TRUE)) %>% 
+  select(state_fips, county_fips, health_group)
+
+bottomho_statec = merge(bottomho_state, cfips, by.x = c("state_fips", "county_fips"),
+               by.y = c("statecode", "countycode"))
+
+#compare with GL 
+gl = haven::read_sas(paste0(glpath, "ho_bottom_cluster_by_state.sas7bdat"))
+
+setdiff(gl$county, bottomho_statec$county)
+
+summary(gl$ho_cluster2025)
+summary(bottomho_statec$health_group)
+
+```
+
+```{r healthiest least healthy w help from GL }
+
+# get all ranked measures first (34 total)
+rankedmeasures = measuredes %>% filter(year == 2025) %>% 
+  filter(measure_type == 0) %>% select(measure_id)
+
+
+
+rmeasures = measuresnew %>% filter(county_fips != "000") %>% 
+  filter(measure_id %in% rankedmeasures$measure_id) #this is in long format: 34 measures for 3143 counties 
+
+#for easier county selection later 
+rmeasures$fips = paste0(rmeasures$state_fips, rmeasures$county_fips)
+
+
+
+#calculate percentiles based on ho_zscore
+
+percentiles = categoriesnew %>% filter(category_id == 31) %>% 
+  filter(county_fips !="000") %>% 
+  select(state_fips, county_fips, z_score) %>% 
+  group_by(state_fips) %>% 
+  mutate(
+    ho_percentile =  floor( rank(z_score, ties.method = "average", na.last = "keep")/(sum(!is.na(z_score) )+1)*100 )
+    ) %>% 
+  ungroup()
+
+
+#calculate percentile rank 
+percentile_rank <- percentiles %>% 
+  group_by(state_fips) %>% 
+  mutate(ho_rank = rank(z_score, na.last = "keep"))
+
+
+# top 10 
+
+top10ho_counties <- percentile_rank %>% 
+  filter(ho_rank == 1 | ho_percentile <= 9) %>% 
+  filter(state_fips != "11") %>% 
+  ungroup()
+
+top10ho_counties$fips = paste0(top10ho_counties$state_fips, top10ho_counties$county_fips)
+
+
+top10_median = rmeasures %>% 
+  filter(measure_id %in% rankedmeasures$measure_id) %>% 
+  filter(fips %in% top10ho_counties$fips) %>% 
+  group_by(measure_id) %>% 
+  summarise(median = median(raw_value, na.rm = TRUE))
+
+
+# bottom 10 
+
+bottom10ho_counties <- percentile_rank %>% 
+  group_by(state_fips) %>% 
+  mutate(state_max = max(ho_rank, na.rm = TRUE)) %>% 
+  mutate(last = if_else(ho_rank == state_max, 1, 0)) %>% 
+  filter(last == 1 | ho_percentile >= 90) %>% 
+  filter(state_fips != "11") %>% 
+  ungroup()
+
+bottom10ho_counties$fips = paste0(bottom10ho_counties$state_fips, bottom10ho_counties$county_fips)
+
+bottom10_median = rmeasures %>% 
+  filter(measure_id %in% rankedmeasures$measure_id) %>% 
+  filter(fips %in% bottom10ho_counties$fips) %>% 
+  group_by(measure_id) %>% 
+  summarise(median = median(raw_value, na.rm = TRUE))
+
+
+#middle 80 percent 
+
+mid80ho_counties <- percentile_rank %>% 
+  group_by(state_fips) %>% 
+  mutate(state_max = max(ho_rank, na.rm = TRUE)) %>% 
+  mutate(last = if_else(ho_rank == state_max, 1, 0)) %>% 
+  filter(ho_percentile >= 10, ho_percentile < 90, ho_rank != 1, last != 1) %>% 
+  ungroup()
+
+mid80ho_counties$fips = paste0(mid80ho_counties$state_fips, mid80ho_counties$county_fips)
+
+
+mid80ho_median = rmeasures %>% 
+  filter(measure_id %in% rankedmeasures$measure_id) %>% 
+  filter(fips %in% mid80ho_counties$fips) %>% 
+  group_by(measure_id) %>% 
+  summarise(median = median(raw_value, na.rm = TRUE))
+
+
+#overall 
+overall_median = rmeasures %>% 
+  group_by(measure_id) %>% 
+  summarise(median = median(raw_value, na.rm = TRUE))
+
+
+hlh <- purrr::reduce(
+  list(
+    top10_median %>% rename(healthiest = median),
+    bottom10_median %>% rename(least_healthy = median), 
+    mid80ho_median %>% rename(other = median),
+    overall_median %>% rename(overall = median) 
+       ), 
+  dplyr::left_join, 
+  by = c("measure_id")) %>% 
+  mutate(ratio = least_healthy/healthiest) 
+
+
+
+
+hhh = hlh %>% 
+  #mutate(measure_id = str_replace(measure, "_rawvalue", "")) %>% 
+  left_join(measuredes %>% filter(year == 2025) %>% select(measure_id, measure_name), by = "measure_id") %>% 
+  select(-measure_id) %>% 
+  select(measure = measure_name, healthiest, least_healthy, other, ratio) %>% 
+  mutate(across(where(is.numeric), ~round(., digits = 4)))%>% 
+  rename("Healthiest Counties (Top 10%ile of HO)" = healthiest,
+    "Least Healthy Counties (Bottom 10%ile of HO)" = least_healthy ,
+    'Middle 80% of Counties' = other ,
+    "Ratio (Least healthy / Healthiest)" = ratio)
+
+
+
+# compare with GL 
+gl = haven::read_sas(paste0(glpath, "healthiest_leasthealthy.sas7bdat"))
+
+
+summary(gl$others)
+summary(hlh$other)
+
+summary(gl$healthiest)
+summary(hlh$healthiest)
+
+summary(gl$least_healthy)
+summary(hlh$least_healthy)
+
+summary(gl$ratio)
+summary(hlh$ratio)
+
+```
+
+```{r national statistics - calc all first, then break into clustered and non clustered }
+
+# need nmiss, min max, mean, std, p10, median, p90, national 
+
+nat = measuresnew %>% 
+  filter(!(measure_id %in% measuredes$measure_id[measuredes$format_type == 3])) %>% #ratios will be handled separately 
+  group_by(measure_id) %>% 
+  summarize(nmiss = sum(is.na(raw_value)),
+         min = min(raw_value, na.rm = TRUE),
+         max = max(raw_value, na.rm = TRUE), 
+         mean = mean(raw_value, na.rm = TRUE), 
+         std = sd(raw_value, na.rm = TRUE), 
+         p10 = quantile(raw_value, probs = .10, type = 2, na.rm = TRUE), #type 2 is sas default 
+         median = median(raw_value, na.rm = TRUE), 
+         p90 = quantile(raw_value, probs = .90, type = 2, na.rm = TRUE)) %>% 
+  mutate(
+    national = sapply(measure_id, function(mid) {
+      national_value <- statesnew %>%
+        filter(state_fips == "00" & county_fips == "000" & year == thisyear & measure_id == mid) %>%
+select(raw_value) %>%
+        pull()
+      return(national_value)
+    }))
+
+
+
+#fix national values for ratios   
+rev = measuresnew %>% 
+  filter(measure_id %in% measuredes$measure_id[measuredes$format_type == 3]) %>% 
+  group_by(measure_id) %>% 
+  summarize(
+    nmiss = sum(is.na(raw_value)),
+    min = 1/ max(raw_value, na.rm = TRUE), 
+    max = max(other_data_1, na.rm = TRUE), 
+    mean = 1/mean(raw_value, na.rm = TRUE), 
+    std = 1/sd(raw_value, na.rm = TRUE), 
+    p10 = 1/ quantile(raw_value, probs = 0.9, type =2, na.rm = TRUE),
+    median = 1/median(raw_value, na.rm = TRUE), 
+    p90 = 1/quantile(raw_value, probs = 0.1, type = 2, na.rm = TRUE)) %>% 
+ mutate(
+  national = sapply(measure_id, function(mid) {
+    national_value <- statesnew %>%
+      filter(state_fips == "00" & county_fips == "000" & year == thisyear & measure_id == mid) %>%
+      select(raw_value) %>%
+      pull()
+    
+    # Return the reciprocal (1 / raw_value)
+    return(1 / national_value)
+  })
+)
+
+ 
+
+natnat = bind_rows(nat,rev)
+
+
+
+
+
+
+
+
+# make separate datasets for ranked and unranked 
+
+rankedmeasures = measuredes %>% 
+  filter(year == thisyear) %>% 
+  filter(measure_type == 0) %>% 
+  select(measure_id)
+
+nat_ranked = natnat %>% 
+  filter(measure_id %in% rankedmeasures$measure_id) 
+nat_unranked = natnat %>% 
+  filter(!(measure_id %in% rankedmeasures$measure_id))
+
+
+
+
+
+#############################################################
+# compare to ganhua 
+
+gl = haven::read_sas(paste0(glpath, "national_stats.sas7bdat"))
+
+gl$measure_id = readr::parse_number(gl$`_name_`)
+
+glhow = merge(gl, nat_ranked, by = "measure_id")
+
+
+
+# Define a small tolerance threshold for rounding comparison
+tolerance <- 1e-3  # Adjust this tolerance as needed (e.g., 1e-5 for 5 decimal places)
+
+# Compare corresponding .x and .y columns with a tolerance for rounding
+glhow_comparison <- glhow %>%
+  mutate(
+    nmiss_match = nmiss.x == nmiss.y,
+    min_match = abs(min.x - min.y) < tolerance,
+    mean_match = abs(mean.x - mean.y) < tolerance,
+    std_match = abs(std.x - std.y) < tolerance,
+    p10_match = abs(p10.x - p10.y) < tolerance,
+    median_match = abs(median.x - median.y) < tolerance,
+    p90_match = abs(p90.x - p90.y) < tolerance
+  ) %>%
+  mutate(
+    all_match = nmiss_match & min_match & mean_match & std_match & p10_match & median_match & p90_match
+  )
+
+# View rows where the columns don't match (after considering tolerance)
+glhow_comparison %>% filter(!all_match)
+
+
+
+```
+
+CREATE FINAL DATASET
+
+```{r}
+#if datasets are here, they've already been dup'd!!! 
+
+library(openxlsx)
+# Writing the data frame into an excel file including NULL(NA) values 
+
+wb= createWorkbook()
+addWorksheet(wb, sheetName ="Unclustered Counties")
+writeData(wb, sheet = "Unclustered Counties", unclustd)
+
+addWorksheet(wb, sheetName ="Total Clustered-Unclustered")
+writeData(wb, sheet = "Total Clustered-Unclustered", cu)
+
+addWorksheet(wb, sheetName ="HO HF Distribution US")
+writeData(wb, sheet = "HO HF Distribution US", hohfdist)
+
+addWorksheet(wb, sheetName ="HO Distribution by State")
+writeData(wb, sheet = "HO Distribution by State", ho_bystate)
+
+addWorksheet(wb, sheetName ="HF Distribution by State")
+writeData(wb, sheet = "HF Distribution by State", hf_bystate)
+
+addWorksheet(wb, sheetName ="Top HO in US")
+writeData(wb, sheet = "Top HO in US", tophoc)
+
+addWorksheet(wb, sheetName ="Top HO by state")
+writeData(wb, sheet = "Top HO by state", topho_statec)
+
+addWorksheet(wb, sheetName ="Top HF in US")
+writeData(wb, sheet = "Top HF in US", tophfc)
+
+addWorksheet(wb, sheetName ="Top HF by state")
+writeData(wb, sheet = "Top HF by state", tophf_statec)
+
+addWorksheet(wb, sheetName ="Bottom HO in US")
+writeData(wb, sheet = "Bottom HO in US", bottomhoc)
+
+addWorksheet(wb, sheetName ="Bottom HO by state")
+writeData(wb, sheet = "Bottom HO by state", bottomho_statec)
+
+addWorksheet(wb, sheetName ="Bottom HF in US")
+writeData(wb, sheet = "Bottom HF in US", bottomhfc)
+
+addWorksheet(wb, sheetName ="Bottom HF by state")
+writeData(wb, sheet = "Bottom HF by state", bottomhf_statec)
+
+addWorksheet(wb, sheetName ="Healthiest Least Healthy")
+writeData(wb, sheet = "Healthiest Least Healthy", hhh)
+
+addWorksheet(wb, sheetName ="National Stats - Clustered")
+writeData(wb, sheet = "National Stats - Clustered", nat_ranked)
+
+addWorksheet(wb, sheetName ="National Stats - Unclustered")
+writeData(wb, sheet = "National Stats - Unclustered", nat_unranked)
+
+saveWorkbook(wb, file = paste0(resultspath, "howqa_other.xlsx", overwrite = TRUE))
+
+
+```
+
+Some things that need to be fixed:
+
+add national calcs to R code and/or make national specific sas file
+
+figure out why v169 school funding adequacy sas calcs are not working...... and correct or delete
+
+add correlations and maybe scatter plot
+
+movement hf, movement ho
+
+state change statistics
+
+\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+Code from here on is not in use
+
+Use SAS file instead
+
+```{r national stats }
+
+states = plyr::rbind.fill(statesnew, statesold)
+
+nat = merge(measuredes, states, by = c("measure_id", "year")) %>% 
+  filter(state_fips == "00" & county_fips == "000")
+
+
+states %>% filter(county_fips == "000" & state_fips != "00") %>% 
+  group_by(measure_id, year) %>% 
+  summarize(numerator_n = sum(numerator, na.rm = TRUE), 
+            denominator_n = sum(denominator, na.rm = TRUE), 
+            num_n = median(numerator, na.rm = TRUE))
+
+nat = measuresnew %>% group_by(measure_id) %>% 
+  summarize(nmiss = sum(is.na(raw_value)),
+         min = min(raw_value, na.rm = TRUE),
+         max = max(raw_value, na.rm = TRUE), 
+         mean = mean(raw_value, na.rm = TRUE), 
+         std = sd(raw_value, na.rm = TRUE), 
+         p10 = quantile(raw_value, probs = .10, na.rm = TRUE),
+         median = median(raw_value, na.rm = TRUE), 
+         p90 = quantile(raw_value, probs = .90, na.rm = TRUE))
+
+rationat = measuresnew %>% filter(!is.na(other_data_1)) %>% 
+  group_by(measure_id) %>% 
+  summarize(ratiomax = max(other_data_1),
+            ratiop10  = quantile(other_data_1, probs = 0.1))
+
+natnat = merge(nat, rationat, by = "measure_id", all = TRUE)
+
+#fix national values for ratios   
+rev = natnat %>% filter(measure_id %in% measuredes$measure_id[measuredes$format_type == 3]) %>% 
+  mutate(min = 1/max,
+            max = 1/ratiomax,
+            mean = 1/mean,
+            std = 1 / std,
+            p10 = 1/ p90, #verify 
+            median = 1/ median,
+         p90 = 1/p10) #verify, 
+         #national = 1/national)
+
+#compare with GL 
+gl = haven::read_sas(paste0(glpath, "national_stats.sas7bdat"))
+
+
+
+
+measuresnew %>% filter(measure_id == 169)%>% 
+  summarize(nmiss = sum(is.na(raw_value)),
+         min = min(raw_value, na.rm = TRUE),
+         max = max(raw_value, na.rm = TRUE), 
+         mean = mean(raw_value, na.rm = TRUE), 
+         std = sd(raw_value, na.rm = TRUE), 
+         p10 = quantile(raw_value, probs = .10, na.rm = TRUE),
+         median = median(raw_value, na.rm = TRUE), 
+         p90 = quantile(raw_value, probs = .90, na.rm = TRUE))
+
+```

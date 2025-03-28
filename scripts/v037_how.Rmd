@@ -1,0 +1,188 @@
+---
+title: "v037 no race disagg"
+author: "Hannah Olson-Williams"
+output: html_document
+---
+
+All birth data is saved on an external hard drive because it comes from NCHS. 
+
+Load the NCHS births data 
+
+Numerator: live births for which the infant weighed less than 2,500 grams (approximately 5 lbs., 8 oz.)
+
+Denominator: total number of live births for which a weight has been recorded
+
+```{r}
+nat17 = readr::read_fwf("E:/CHRR/natality raw/rawdata/NATL2017US.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(bw = c(511), mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat18 = readr::read_fwf("E:/CHRR/natality raw/rawdata/NATL2018US.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(bw = c(511), mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat19 = readr::read_fwf("E:/CHRR/natality raw/rawdata/nat2019us.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(bw = c(511), mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat20 = readr::read_fwf("E:/CHRR/natality raw/rawdata/NATL2020us.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(bw = c(511), mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat21 = readr::read_fwf("E:/CHRR/natality raw/rawdata/nat2021us.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(bw = c(511), mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat22 = readr::read_fwf("E:/CHRR/natality raw/rawdata/NATL2022US.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(bw = c(511), mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat23 = readr::read_fwf("E:/CHRR/natality raw/rawdata/nat2023us.AllCnty.txt", 
+                         col_positions = readr::fwf_cols(bw = c(511), mracehisp = c(117), county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+
+nat = list(nat17, nat18, nat19, nat20, nat21, nat22, nat23)
+
+#remove births with mother's residence American Samoa, Guam, Northern Marianas, Puerto Rico, Virgin Islands, not applicable, and not classified ;
+natff = lapply(nat, function(x) x %>% filter(!(state %in% c("AS", "GU", "MP", "PR", "VI", "XX", "ZZ", "AB", "BC", "MB", "NB", "ON", "QC", "SK", "ZZ")) & !(county_fips %in% c("000", "999"))) %>% mutate(birth = 1))
+
+natfsum = lapply(natff, function(x) x %>% group_by(state, county_fips, bw) %>% summarise(tbirth = sum(birth)))
+
+nattot = natfsum %>% reduce(full_join, by = c("state", "county_fips", "bw")) 
+nattot = data.frame(nattot)
+nattot[4:10] <- sapply(nattot[4:10],as.numeric)
+
+
+
+nattot$birthsums = rowSums(nattot[4:10], na.rm = TRUE)
+
+#get state codes with abbrevs 
+state = tigris::fips_codes %>% select(state, state_code) %>% distinct()
+
+nats = merge(nattot, state, by = "state")
+
+#verify that nothing important got dropped 
+nojoin = dplyr::anti_join(nattot, nats, by = "state")
+
+
+
+#remove all bw=4 rows since bw=4 indicates that weight was not recorded 
+natn= nats %>% filter(state != "VI") %>% filter(bw !=4 & !is.na(bw)) %>% select("state_code", "county_fips", "birthsums", "bw") 
+
+
+#fix some fips that changed: 
+# 02270, 46113, 51515
+
+natnn = natn %>% mutate(county_fips = case_when(
+      state_code =="46" & county_fips =='113' ~'102',
+      state_code =='02' & county_fips =='270' ~'158',
+      state_code =='51' & county_fips =='515' ~'019',
+      TRUE ~ county_fips
+      ))
+
+
+
+natnnn = natnn %>% group_by(state_code, county_fips) %>% 
+  summarize(num = sum(birthsums[bw %in% c(1,2)], na.rm = TRUE),
+            denom = sum(birthsums, na.rm = TRUE))
+
+```
+
+
+
+
+
+```{r}
+statesums = natnn %>% group_by(state_code) %>% 
+  summarize(num = sum(birthsums[bw %in% c(1, 2)], na.rm = TRUE),
+            denom = sum(birthsums, na.rm = TRUE))
+statesums$county_fips = "000"
+
+natsum = natnn %>%
+  summarize(num = sum(birthsums[bw %in% c(1,2)], na.rm = TRUE),
+            denom = sum(birthsums, na.rm = TRUE))
+natsum$state_code = "00" 
+natsum$county_fips = "000"
+
+natall = rbind(natnnn, statesums, natsum)
+
+
+natall$num = ifelse(natall$num < 10, NA, natall$num)
+natall$denom = ifelse(natall$num < 10, NA, natall$denom)
+
+
+
+```
+
+Now create the final dataset and calculate rates 
+
+
+```{r}
+
+natall$rate = natall$num/ natall$denom
+
+#calculate CIs
+#equations on admin 
+
+#need standard error first 
+#rse of a proportion = sqrt(p*(1-p)/n) / p 
+
+natall = natall %>% group_by(state_code, county_fips) %>% 
+  mutate(rse = sqrt(rate*(1-rate)/ denom)/rate)
+
+natallc = natall %>% 
+  mutate(lci = ifelse(!(num %in% 0:9), rate - 1.96*sqrt((1-rate)*rate/denom), NA), #suppress CIs when fewer than 10 lbw births 
+         uci = ifelse(!(num %in% 0:9), rate + 1.96*sqrt((1-rate)*rate/denom), NA), 
+         unreliable = ifelse(rse >0.2 | num <20, 1, 0))
+
+
+
+# add back original fipscodes 
+
+cf = haven::read_sas("P:/CH-Ranking/Data/2025/2 Cleaned data ready for Calculation or Verification/county_fips_with_ct_old.sas7bdat")
+sf = haven::read_sas("P:/CH-Ranking/Data/2025/2 Cleaned data ready for Calculation or Verification/state_fips.sas7bdat")
+sf = sf %>% select(statecode, countycode)
+cf = cf %>% select(statecode, countycode)
+fips = rbind(sf, cf)
+
+how = merge(fips, natallc, by.x = c("statecode", "countycode"), by.y = c("state_code", "county_fips"), all.x = TRUE)
+how$fips = paste0(how$statecode, how$countycode)
+```
+
+
+Now compare with ganhua 
+
+
+```{r}
+#ganhua's final dataset
+glu = haven::read_sas("P:/CH-Ranking/Data/2025/3 Data calculated needs checking/v037.sas7bdat")
+glu$fips = paste0(glu$statecode, glu$countycode)
+
+
+gh = merge(glu, how, by = "fips")
+gh$diff_rate= gh$rate - gh$v037_rawvalue
+gh$diff_num = gh$num - gh$v037_numerator
+gh$diff_denom = gh$denom - gh$v037_denominator
+gh$diff_cilow = gh$lci - gh$v037_cilow
+gh$diff_cihigh = gh$uci - gh$v037_cihigh
+
+gh %>% group_by(unreliable.y) %>% count()
+gh %>% group_by(unreliable.x) %>% count()
+
+
+temp = gh %>% filter(abs(diff_rate) > 0.001 | abs(diff_cihigh) > 0.001 | 
+                       abs(diff_num) > 0.001 |
+                       abs(diff_denom) > 0.001 |
+                       abs(diff_cilow) > 0.001)
+
+summary(glu)
+summary(how)
+
+
+write.csv(how, "P:/CH-Ranking/Data/2025/3 Data calculated needs checking/Hannah datasets/v037_how.csv")
+
+
+#save to project 
+readr::write_csv(how, file = "~/chrr_measure_calcs/duplicated_data/v037_how.csv")
+
+```
+
+
+
+
+
+
