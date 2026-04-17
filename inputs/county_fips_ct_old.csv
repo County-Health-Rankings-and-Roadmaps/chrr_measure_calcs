@@ -1,0 +1,9 @@
+statecode,countycode,state,county,fipscode
+b'09',b'001',b'CT',b'Fairfield County',b'09001'
+b'09',b'003',b'CT',b'Hartford County',b'09003'
+b'09',b'005',b'CT',b'Litchfield County',b'09005'
+b'09',b'007',b'CT',b'Middlesex County',b'09007'
+b'09',b'009',b'CT',b'New Haven County',b'09009'
+b'09',b'011',b'CT',b'New London County',b'09011'
+b'09',b'013',b'CT',b'Tolland County',b'09013'
+b'09',b'015',b'CT',b'Windham County',b'09015'

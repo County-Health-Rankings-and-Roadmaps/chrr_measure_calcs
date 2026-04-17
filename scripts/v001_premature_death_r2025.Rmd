@@ -61,8 +61,8 @@ census_pop_dir <- "C:/01_CHRR/data/Census_county_pop_est"
 - The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
 ```{r }
 fips <-  bind_rows(
-  read_sas("../inputs/county_fips_with_ct_old.sas7bdat"),
-  read_sas( "../inputs/state_fips.sas7bdat")) %>% 
+  read_csv("../inputs/county_fips_with_ct_old.csv"),
+  read_csv( "../inputs/state_fips.csv")) %>% 
   arrange(statecode, countycode) %>% 
   glimpse()
 
@@ -317,4 +317,3 @@ v001_3 <- v001_2 %>%
 ```{r}
 save_data(v001_3, "v001")
 ```
-
