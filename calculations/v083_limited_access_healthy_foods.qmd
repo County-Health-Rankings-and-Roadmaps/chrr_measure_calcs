@@ -1,0 +1,137 @@
+---
+title: "v083 Limited Access to Healthy Foods"
+author: "how"
+format: html
+editor: visual
+---
+
+## Description 
+Percentage of population who are low-income and do not live close to a grocery store.
+
+## Numerator
+The numerator is the number of people who are low income and do not live close to a grocery store. Living close to a grocery store is defined differently in rural and nonrural areas; in rural areas, it means living less than 10 miles from a grocery store; in nonrural areas, less than one mile. Low income is defined as having an annual family income of less than or equal to 200 percent of the federal poverty threshold for the family size.
+
+## Denominator 
+The denominator is the 2010 US Census population.
+
+## Data download link
+https://www.ers.usda.gov/data-products/food-access-research-atlas/download-the-data/
+
+USDA has not published updated data since 2019. Therefore, the calculations shown here match those needed to replicate the 2022, 2023, 2024, 2025, and 2026 CHRR releases. 
+
+## Calculating this measure 
+Use the following to define those that have limited access to healthy foods:
+
+Numerator: LALOWI1_10 (Low access, low-income population at 1 mile for urban areas and 10 miles for rural areas, number)
+
+Denominator: Pop2010 (Population, tract total)
+
+Rawvalue: LALOWI1_10/Pop2010
+
+Aggregate from census tract to county, state, and national-level.
+
+
+### import packages
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(haven)
+library(stringr)
+library(here)
+```
+
+
+
+### standard county and state fips
+
+The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+
+```{r}
+fips <-  bind_rows(
+  read_sas(here("inputs/county_fips_with_ct_old.sas7bdat")) ,
+  read_sas(here("inputs/state_fips.sas7bdat")))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+
+
+### load raw data
+
+```{r}
+food_access = read.csv(here("raw_data/USDA/Food Access Research Atlas.csv"))
+```
+
+
+
+# extract fipscodes 
+```{r}
+# Extract first 2 digits → state code
+food_access$statecode <- substr(food_access$CensusTract, 1, 2)
+
+# Extract digits 3–5 → county code
+food_access$countycode <- substr(food_access$CensusTract, 3, 5)
+
+# Pad with zeros to ensure fixed width
+food_access$statecode  <- str_pad(food_access$statecode, width = 2, side = "left", pad = "0")
+food_access$countycode <- str_pad(food_access$countycode, width = 3, side = "left", pad = "0")
+
+```
+
+# aggregate to calculate county values 
+```{r}
+county = food_access %>% 
+  #filter(countycode != "000") %>% 
+  #filter(statecode != "00") %>% 
+  group_by(statecode, countycode) %>% 
+  summarize(num = sum(as.numeric(LALOWI1_10), na.rm = TRUE), 
+         denom = sum(as.numeric(Pop2010), na.rm = TRUE), 
+         rawvalue = round(num/denom, 4))
+
+state = county %>% 
+  #filter(countycode != "000") %>% 
+  #filter(statecode != "00") %>% 
+  group_by(statecode) %>% 
+  summarize(num = sum(num, na.rm = TRUE), 
+         denom = sum(denom, na.rm = TRUE), 
+         rawvalue = round(num/denom, 4)) %>% 
+  mutate(countycode = "000")
+
+ntl = state %>% 
+  #filter(countycode != "000") %>% 
+  #filter(statecode != "00") %>% 
+  summarize(num = sum(num, na.rm = TRUE), 
+         denom = sum(denom, na.rm = TRUE), 
+         rawvalue = round(num/denom, 4)) %>% 
+  mutate(statecode = "00", 
+         countycode = "000")
+
+
+all = rbind(county, state, ntl)
+
+```
+
+# standardize fipscodes 
+```{r}
+all_fips = merge(fips, all, by = c("statecode", "countycode"), all.x = TRUE)
+```
+
+# quick check 
+```{r}
+pdrive = haven::read_sas("P:/CH-Ranking/Data/2025/6 Measure Datasets/Additional Measures/v083.sas7bdat")
+
+pall = merge(pdrive, all_fips, by = c("statecode", "countycode"))
+
+pall$rawdiff = pall$rawvalue - pall$v083_rawvalue
+
+pall$numdiff = pall$num - round(pall$v083_numerator) 
+
+pall$denomdiff = pall$denom - pall$v083_denominator
+
+temp = pall %>% filter(denomdiff < 0) %>% 
+  select(statecode, countycode, num, numdiff, v083_numerator)
+
+s21 = pall %>% filter(statecode == "21")
+```
+

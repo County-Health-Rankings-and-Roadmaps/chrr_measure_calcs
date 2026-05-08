@@ -1,0 +1,283 @@
+---
+title: "v129 Infant mortality - Ranking 2026"
+output: html_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+- Description
+Number of infant deaths (within 1 year) per 1,000 live births.
+
+- What is the numerator?
+The numerator is the cumulative number of deaths occurring before one year of age.
+
+- What is the denominator?
+The denominator is the total number of live births.
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+```
+
+# set up directory
+
+```{r}
+# set up directory that holds data needed for calculations
+# NCHS mortality data, not allowed to share in GitHub
+nchs_mort_dir <- "D:/CHRR/mortality raw"
+
+# NCHS natality data, not allowed to share in GitHub
+nchs_nata_dir <- "D:/CHRR/natality raw"
+
+# Census county population estimates data
+census_pop_dir <- "D:/CHRR/pop raw"
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat"),
+  read_sas( "../inputs/state_fips.sas7bdat")) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# helpers
+
+## functions used commonly by NCHS measures
+
+- some commonly used functions are in a separate file, `nchs_measure_helpers.R`. 
+```{r}
+source("../scripts/nchs_measure_helpers.R")
+```
+
+## function to process 1 year mort data for infants
+
+```{r}
+get_infant_mort <- function(nchs_mort, df_fips){
+  mort_1 <- nchs_mort %>% 
+      # include only 50 states + DC
+    filter(state_of_residence %in% c(state.abb, "DC")) %>% 
+    rename(state = state_of_residence, countycode = county_of_residence) %>% 
+    # fix county FIPS codes
+    mutate(countycode = case_when(
+      state =='SD' & countycode =='113' ~'102',
+      state =='AK' & countycode =='270' ~'158',
+      state =='VA' & countycode =='515' ~'019',
+      TRUE ~ countycode
+      )
+    )
+  
+  mort_2 <- mort_1 %>% 
+    filter(detail_age!= 9999 & detail_age >1999) %>% 
+    select(-c("detail_age")) 
+  
+  # county
+  mort_ct <- mort_2 %>% 
+    group_by(state, countycode) %>% 
+    summarise(deaths = n(), .groups = "drop")
+  
+  # state
+  mort_st <- mort_2 %>% 
+    group_by(state) %>% 
+    summarise(countycode = "000", deaths = n(), .groups = "drop") 
+  
+  # us
+  mort_us <- mort_2 %>% 
+    summarise(state = "US", countycode = "000", deaths = n())
+  
+  mort_all <- bind_rows(mort_ct, mort_st, mort_us) %>% 
+  arrange(state, countycode) %>% 
+  # add statecode
+  left_join(df_fips %>% select(state, statecode) %>% 
+              distinct(),
+            by = c("state")) %>% 
+  ungroup() %>% 
+  select(-state) %>% 
+  select(statecode, everything()) %>% 
+  arrange(statecode, countycode) 
+  
+  return(mort_all)
+  
+}
+```
+
+## function to process mortality data for v129 subgroups
+
+```{r}
+process_mort_v129 <- function(year){
+  
+  print(get_mort_file_name(year))
+  
+  mort <- read_mort_data(
+    file_path = file.path(nchs_mort_dir, get_mort_file_name(year) ), 
+    header = mort_header,
+    n_max = Inf) %>% 
+    get_infant_mort(df_fips=fips)
+  
+  return(mort)
+}
+```
+
+# Pop data: NCHS birth data
+
+age_cat = 0, by race 6 + 6
+
+   1L,   "White", non-Hispanic
+   2L,   "Black", non-Hispanic
+   3L,   "AIAN", non-Hispanic
+   4L,   "Asian", non-Hispanic
+   5L,   "NHOPI", non-Hispanic
+   6L,   "Two or More Races", non-Hispanic
+
+   11L,   "White", Hispanic
+   12L,   "Black", Hispanic
+   13L,   "AIAN", Hispanic
+   14L,   "Asian", Hispanic
+   15L,   "NHOPI", Hispanic
+   16L,   "Two or More Races", Hispanic
+
+```{r}
+yrs <- c(2017:2023)
+
+nchs_births <- read_csv(paste0(nchs_nata_dir, "/nchs_births_2017_2023.csv")) %>% 
+  filter(year %in% yrs) %>% 
+  glimpse()
+
+infant_pop <- nchs_births %>% 
+  group_by(statecode, countycode) %>% 
+  summarise(pop = sum(births, na.rm = TRUE), .groups = "drop") %>% 
+  arrange(statecode, countycode) %>% 
+  # select(1:2, age_cat, race, pop) %>% 
+  glimpse()
+
+infant_pop
+```
+
+```{r}
+pop_all <- infant_pop %>% 
+  # fix counties
+  mutate(countycode = case_when(
+    statecode=='46' & countycode =='113' ~ '102',
+    statecode=='51' & countycode =='515' ~ '019',
+    statecode=='02' & countycode =='270' ~ '158',
+    statecode=='02' & countycode =='201' ~ '198',
+    TRUE ~ countycode
+  )) %>% 
+  right_join(
+    fips %>% 
+      select(statecode, countycode),
+    by = c("statecode", "countycode")
+  ) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+# mortality data
+
+## header
+
+```{r}
+mort_header <- tribble(
+  ~fld_name, ~start,  ~end,
+  "state_of_residence", 29,  30,
+  "county_of_residence", 35,  37,
+  "detail_age", 70, 73
+)
+```
+
+## mort 2017-2023: map
+
+```{r}
+mort_all <- c(2017:2023) %>% 
+  map(process_mort_v129) %>% 
+  list_rbind() %>% 
+  group_by(statecode, countycode) %>% 
+  summarise(deaths = sum(deaths), .groups = "drop") %>%
+  glimpse()
+
+```
+
+# mortality calculation
+
+## merge mort and pop data
+
+```{r}
+merged <- pop_all %>% 
+  left_join(mort_all, 
+            by = c("statecode", "countycode")) %>% 
+  glimpse()
+  
+```
+
+## confidence Intervals
+
+```{r}
+v129 <- merged %>%
+  rename(numerator = deaths, denominator = pop) %>%
+  mutate(
+    rawvalue = numerator / denominator *1000,
+    rse = 100 * sqrt(1/numerator),
+  ) %>%
+  mutate(
+    std = rawvalue * rse / 100,
+    cilow = rawvalue - 1.96 * std,
+    cihigh = rawvalue + 1.96 * std
+  ) %>%
+  select(-c(rse, std)) %>% 
+  glimpse()
+
+```
+
+## calculate CI L and U for n < 100
+
+```{r}
+v129_2 <- v129 %>% 
+  left_join(get_pois_CI(), by = c("numerator" = "n")) %>% 
+  mutate(cilow = if_else(numerator>=20 & numerator <=99,
+                         rawvalue * L, cilow),
+         cihigh = if_else(numerator>=20 & numerator <=99,
+                         rawvalue * U, cihigh)) %>% 
+  select(-c(L, U)) %>% 
+  mutate(across(where(is.numeric), ~ if_else(numerator < 20, 
+                                            NA_real_, .x))) %>% 
+  mutate(sourceflag  = NA_real_) %>% 
+  rename_with(.fn = ~paste0("v129_", .x), .cols = c("denominator", "numerator","rawvalue", "cilow" , "cihigh" ,"sourceflag"))
+
+v129_2
+
+```
+
+# add flag_CT
+
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+v129_3 <- v129_2 %>% 
+  add_flag_CT(vnum = "v129", old="A", new = "U")
+```
+
+# Compare to initial calculations 
+```{r}
+compare("v129", v129_3, year = 2026)
+```
+
+
+# save data
+```{r}
+save_data(v129_3, "v129")
+```

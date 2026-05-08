@@ -1,5 +1,5 @@
 ---
-title: "Measuers using ACS 5-year data - R2025"
+title: "Measuers using ACS 5-year data"
 author: "GL"
 output: html_document
 ---
@@ -519,7 +519,7 @@ apply_suppression <-  function(df){
 ```{r}
 save_data <- function(df, vnum, output_dir = "../measure_datasets/") {
   df %>%
-    write_csv(paste0(output_dir, vnum, "_r2025.csv"), na = "")
+    write_csv(paste0(output_dir, vnum, "_r2026.csv"), na = "")
 }
 ```
 
@@ -1014,7 +1014,9 @@ v149 %>%
 
 numerator	= total number of households in a county that spend 50% or more of their household income on housing
 denominator = total occupied housing units for which housing cost burden is computed in a county
-raw_value = Percentage of households that spend 50% or more of their household income on housing	
+raw_value = Percentage of households that spend 50% or more of their household income on housing
+
+NOTE: I am pulling ACS data into R using tidycensus for this calculation - HOW, feb 2026 
 
 ## note: 
 we can use `B25074_001E` to replace:
@@ -1056,6 +1058,51 @@ var_ls_154_homeowner <- c(
 )
 ```
 
+load data using tidycensus 
+```{r}
+library(tidycensus)
+acs_county <- get_acs(
+  geography = "county",
+  variables = c(var_ls_154_homeowner, var_ls_154_rent),
+  year = 2024,
+  survey = "acs5",
+  cache_table = TRUE,
+  output = "wide"
+) %>% 
+  rename(fipscode = GEOID) %>% 
+  mutate(statecode = substr(fipscode, 1,2),
+         countycode = substr(fipscode, 3,5))
+
+acs_state <- get_acs(
+  geography = "state",
+  variables = c(var_ls_154_homeowner, var_ls_154_rent),
+  year = 2024,
+  survey = "acs5",
+  cache_table = TRUE,
+  output = "wide"
+) %>% 
+  rename(fipscode = GEOID) %>% 
+  mutate(statecode = substr(fipscode, 1,2),
+         countycode = "000")
+
+
+acs_ntl <- get_acs(
+  geography = "us",
+  variables = c(var_ls_154_homeowner, var_ls_154_rent),
+  year = 2024,
+  survey = "acs5",
+  cache_table = TRUE,
+  output = "wide"
+) %>% 
+  mutate(statecode = "00",
+         countycode = "000",
+         fipscode = "00000")
+
+
+acs5 = bind_rows(acs_state, acs_county, acs_ntl)
+
+```
+
 
 ## process data
 
@@ -1069,7 +1116,7 @@ similar situation for `se_denom_square` for 'homeowner'
 
 ```{r}
 SHCB_rent <- acs5 %>% 
-  select(1:3, all_of(var_ls_154_rent)) %>% 
+  #select(1:3, all_of(var_ls_154_rent)) %>% 
   mutate(numerator = B25074_009E + B25074_018E + B25074_027E + B25074_036E +
            B25074_045E + B25074_054E + B25074_063E, 
          denominator = B25074_002E + B25074_011E + B25074_020E + B25074_029E +
@@ -1085,7 +1132,7 @@ SHCB_rent <- acs5 %>%
   glimpse()
 
 SHCB_homeowner <- acs5 %>% 
-  select(1:3, all_of(var_ls_154_homeowner)) %>% 
+  #select(1:3, all_of(var_ls_154_homeowner)) %>% 
   mutate(numerator = B25095_009E + B25095_018E + B25095_027E + B25095_036E +
            B25095_045E + B25095_054E + B25095_063E + B25095_072E, 
          denominator = B25095_002E + B25095_011E + B25095_020E + B25095_029E +
@@ -1151,6 +1198,7 @@ v154
 v154 %>% 
   save_data("v154")
 ```
+
 
 
 # v166 - BROADBAND
