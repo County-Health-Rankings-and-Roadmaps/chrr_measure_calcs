@@ -7,7 +7,7 @@ This repository contains code and data to replicate some measures for the [Count
 At this time, we do not plan to make historical calculations public - this repo may be useful for replicating parts of the 2025 and 2026 releases and for adapting CHR&R methods for future analyses. 
 
 ## Contributions are welcome!
-This repository is intended to support transparency and collaboration. Contributions are welcome from anyone interested in replicating, extending, or improving these calculations. If these calculations are adapted or expanded for other analyses, contributions back to this repository are encouraged. Helpful contributions include adding scripts to calculate new measures of county-level health and equity, updating existing scripts for new data releases, and improving documentation to support reproducibility. Please see the [Contribution Guidelines](https://countyhealthrankings.github.io/welcome/contribute.html) for more information on how to get involved. 
+This repository is intended to support transparency and collaboration. Contributions are welcome from anyone interested in replicating, extending, or improving these calculations. If these calculations are adapted or expanded for other analyses, contributions back to this repository are encouraged. Helpful contributions include adding calculations to calculate new measures of county-level health and equity, updating existing calculations for new data releases, and improving documentation to support reproducibility. Please see the [Contribution Guidelines](https://countyhealthrankings.github.io/welcome/contribute.html) for more information on how to get involved. 
 
 ## Repository Structure
   
@@ -17,7 +17,7 @@ This repository is intended to support transparency and collaboration. Contribut
   - This folder is organized by data source. 
   - *Note: Some raw data are not included if they are not publicly available.*
 
-* **`scripts/`** – R code (`.qmd`, `.Rmd`) and some SAS files for data cleaning, calculation, and formatting of measures.
+* **`calculations/`** – R notebooks (`.qmd`, `.Rmd`) for data cleaning, calculation, and formatting of measures.
   
 * **`measure_datasets/`** – Datasets with calculated values for specific health measures.  
 
