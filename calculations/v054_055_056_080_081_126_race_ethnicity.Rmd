@@ -1,0 +1,258 @@
+---
+title: "v054, v055, v056, v080, v081, v126 - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+v054, % Non-Hispanic Black
+v055, % American Indian & Alaska Native
+v056, % Hispanic
+v080, % Native Hawaiian/Other Pacific Islander
+v081, % Asian
+v126, % Non-Hispanic White
+
+## Raw data access
+
+- Website to downloaded data
+
+`cc-est2023-all.csv`
+
+https://www2.census.gov/programs-surveys/popest/datasets/2020-2023
+
+- Online documentation
+
+https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2020-2023/CC-EST2023-ALLDATA.pdf
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+library(zeallot) # zeallot allows multiple, unpacking, or destructuring assignment in R by providing the `%<-%` operator
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# import Census pop data
+
+data: https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/asrh/cc-est2023-alldata.csv
+
+```{r}
+df_raw <- read_csv("../raw_data/USCB/cc-est2023-alldata.zip") %>%  
+  janitor::clean_names() %>% 
+  glimpse()
+
+# can also directly read from Census website
+# df_raw <- read_csv("https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/asrh/cc-est2023-alldata.csv") %>%
+#   janitor::clean_names() %>% 
+#   glimpse()
+```
+
+# helpers
+
+Note: Some helper functions are used in multiple calculations. Those functions can be saved in one script and sourced in other scripts/RMD's. However, this RMD is intended to be standalone. 
+
+## standardize fips
+
+- This function standardizes the fips codes in the data frame to match the standard fips codes.
+```{r}
+standardize_fips <- function(df, df_fips){
+  res <- fips %>% 
+    select(statecode, countycode) %>% 
+    left_join(df, by = c("statecode", "countycode"))
+  
+  return(res)
+}
+```
+
+## add flag_CT
+
+- This function adds a flag to the data frame for Connecticut counties.
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+```
+
+## calcualte rawvalue for each measure
+
+- This function calculates the raw value for each measure in the data frame.
+```{r}
+cal_rawvalue <- function(df){
+  res <- df %>% 
+    mutate(v054_rawvalue = nhba_total / tot_pop,    
+           v055_rawvalue = ia_total / tot_pop,  
+           v056_rawvalue = h_total / tot_pop,  
+           v080_rawvalue = na_total / tot_pop,  
+           v081_rawvalue = aa_total / tot_pop,  
+           v126_rawvalue = nhwa_total / tot_pop,  
+           v054_numerator = nhba_total,  
+           v054_denominator = tot_pop,  
+           v055_numerator = ia_total,  
+           v055_denominator = tot_pop,  
+           v056_numerator = h_total,  
+           v056_denominator = tot_pop,  
+           v080_numerator = na_total,  
+           v080_denominator = tot_pop,  
+           v081_numerator = aa_total,  
+           v081_denominator = tot_pop,  
+           v126_numerator = nhwa_total,  
+           v126_denominator = tot_pop) %>% 
+  select(-c(tot_pop, nhba_total, nhwa_total, ia_total,  aa_total, na_total, h_total))
+  
+  return(res)
+}
+```
+
+## get an individual measure
+
+```{r}
+get_one_demo_measure <- function(df_in, v_num){
+  
+  df_out <- df_in %>%  
+    select(statecode, countycode, starts_with(v_num))
+  
+  return(df_out)
+}
+
+```
+
+# process data
+
+STATE: State FIPS code
+COUNTY: County FIPS code
+YEAR: Year
+AGEGRP: Age Group
+TOT_POP: Total population
+NHBA_MALE: Not Hispanic, Black or African American alone male population
+NHBA_FEMALE: Not Hispanic, Black or African American alone female population
+NHWA_MALE: Not Hispanic, White alone male population
+NHWA_FEMALE: Not Hispanic, White alone female population
+IA_MALE: American Indian and Alaska Native alone male population 
+IA_FEMALE: American Indian and Alaska Native alone female population
+AA_MALE: Asian alone male population
+AA_FEMALE: Asian alone female population
+NA_MALE: Native Hawaiian and Other Pacific Islander alone male population
+NA_FEMALE: Native Hawaiian and Other Pacific Islander alone female population
+H_MALE: Hispanic male population
+H_FEMALE: Hispanic female population
+
+```{r}
+df1 <- df_raw %>% 
+  filter(year == 5, agegrp == 0) %>%  # YEAR: 5 = 7/1/2023 population estimate ; agegrp == 0: total
+  select(statecode = state, countycode = county, 
+         tot_pop, nhba_male, nhba_female, nhwa_male, nhwa_female,
+         ia_male, ia_female, aa_male, aa_female,
+         na_male, na_female, h_male, h_female) %>% 
+  mutate(nhba_total = nhba_male + nhba_female, 
+         nhwa_total = nhwa_male + nhwa_female, 
+         ia_total = ia_male + ia_female, 
+         aa_total = aa_male + aa_female, 
+         na_total = na_male + na_female, 
+         h_total = h_male + h_female) %>% 
+  select(-c(nhba_male:h_female))
+
+df1
+```
+
+## county level
+
+```{r}
+df_ct <- df1 %>% cal_rawvalue()
+
+df_ct
+```
+
+## state level
+
+```{r}
+df_st <- df1 %>% 
+  group_by(statecode) %>% 
+  summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>% 
+  cal_rawvalue()%>% 
+  mutate(countycode = "000", .after = "statecode")
+
+df_st
+```
+
+## us
+
+```{r}
+df_us <- df1 %>% 
+  summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>% 
+  cal_rawvalue() %>% 
+  mutate(statecode = "00", countycode = "000", .before = "v054_rawvalue")
+
+df_us
+```
+
+## combine county, state, us
+
+```{r}
+df_all <- bind_rows(df_us, df_st, df_ct) %>% 
+  arrange(statecode, countycode)
+
+df_all
+```
+
+# get individual measures
+
+```{r}
+# loop through the list, create a dataframe list
+df_lst <- list('v055', 'v054', 'v056', 'v080', 'v081', 'v126') %>% 
+  map(\(x) get_one_demo_measure(df_all, x) %>% 
+        standardize_fips(df_fips = fips) %>%
+        add_flag_CT(vnum = x) %>%
+        glimpse())
+
+# unpacking the list with `zeallot` to get individual dataframes
+c(v055, v054, v056, v080, v081, v126) %<-% df_lst
+```
+
+# save data
+
+```{r}
+name_list <- list('v055', 'v054', 'v056', 'v080', 'v081', 'v126')
+
+walk2(df_lst, name_list, 
+      ~ write_csv(x = .x, 
+                  file = paste0("../measure_datasets/", .y, "_r2025",
+                                ".csv") ))
+```
+
+

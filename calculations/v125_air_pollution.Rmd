@@ -1,0 +1,139 @@
+---
+title: "v125 Air Pollution: Particulate Matter - R2025"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+- Description
+Average daily density of fine particulate matter in micrograms per cubic meter (PM2.5).
+
+## Raw data access
+
+- Website to downloaded data
+
+https://ephtracking.cdc.gov/DataExplorer/
+
+- Online documentation
+
+https://ephtracking.cdc.gov/indicatorPages
+
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r}
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+# import raw data
+
+```{r}
+raw_dir <- "../raw_data/EPHT"
+
+v125 <- read_csv(file.path(raw_dir, "data_120058.csv")) %>% 
+  glimpse()
+```
+
+# county data
+
+```{r}
+v125_ct <- v125 %>% 
+  select(statecode =StateFIPS,  countycode=CountyFIPS, rawvalue = Value) %>% 
+  mutate(countycode = str_sub(countycode, 3L, 5L)) %>% 
+  filter(!(statecode %in% c("72", "78"))) %>% 
+  glimpse()
+```
+
+# state data
+
+```{r}
+v125_st <- v125_ct %>% 
+  group_by(statecode) %>% 
+  summarise(countycode = "000",
+            rawvalue = median(rawvalue)) %>% 
+  glimpse()
+```
+
+# us
+
+```{r}
+# use state median as national value
+v125_us <- v125_st %>% 
+  summarise(statecode = "00",
+            countycode = "000",
+            rawvalue = median(rawvalue)) %>% 
+  glimpse()
+```
+
+# combine county, state, us data
+
+```{r}
+v125_4 <- fips %>% 
+  select(statecode, countycode) %>% 
+  left_join(
+    bind_rows(v125_ct, v125_st, v125_us), 
+    by = c("statecode", "countycode")) %>% 
+  rename(v125_rawvalue = rawvalue) %>%
+  mutate(v125_numerator = NA_real_, 
+         v125_denominator=NA_real_,
+         v125_cilow=NA_real_,
+         v125_cihigh=NA_real_,
+         v125_sourceflag= NA_real_)
+
+v125_4
+```
+
+# add flag_CT
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+v125_5 <- v125_4 %>% 
+  add_flag_CT(vnum = "v125", old="A", new = "U")
+
+v125_5
+```
+
+## save
+
+```{r}
+write_csv(v125_5,
+          paste0("../measure_datasets/", "v125", "_r2025",
+                 ".csv"),
+          na = "")
+
+``` 

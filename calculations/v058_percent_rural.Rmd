@@ -1,0 +1,268 @@
+---
+title: "v058 % Rural - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# About
+
+## Basic information
+
+- Description
+Percentage of population living in a census-defined rural area.
+
+- What is the numerator?
+The numerator is the number of people living in areas classified as rural by the Census Bureau - that is, all territory not included in an urban area. Urban areas are densely developed territory that have at least 2,000 housing units or a population of at least 5,000.
+
+- What is the denominator?
+The denominator is the 2020 decinnial census county population.
+
+# import packages
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(tigris)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r}
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+# Calculation using 2020 Census Tabulation Blocks Shapefile
+
+## census block: Shapefile (urban rural)
+
+Record Layout for 2020 Census Tabulation Blocks Shapefile with 2020 Census Population and Housing Unit Counts
+```{r}
+tibble::tribble(
+~Field, ~Length,    ~Type,  ~Description,
+   "STATEFP20",      2L, "String",   "2020 Census state FIPS code",
+  "COUNTYFP20",      3L, "String",    "2020 Census county FIPS code",
+   "TRACTCE20",      6L, "String",     "2020 Census tract code",
+   "BLOCKCE20",      4L, "String",    "2020 Census tabulation block number",
+     "GEOID20",     15L, "String", "Census block identifier; a concatenation of 2020 Census state FIPS code, 2020 Census county FIPS code, 2020 Census tract code, and 2020 Census block number",
+   "NAME20",     10L, "String",     "2020 Census tabulation block name; a concatenation of ‘Block’ and the tabulation block number",
+     "MTFCC20",      5L, "String",         "MAF/TIGER Feature Class Code (G5040)",
+        "UR20",      1L, "String",              "Reserved for 2020 Census urban/rural indicator",
+      "UACE20",      5L, "String",     "Reserved for 2020 Census urban area code",
+    "UATYPE20",      1L, "String",    "Reserved for 2020 Census urban area type",
+  "FUNCSTAT20",      1L, "String",    "2020 Census functional status",
+     "ALAND20",     14L, "Number",       "2020 Census land area",
+    "AWATER20",     14L, "Number",        "2020 Census water area",
+  "INTPTLAT20",     11L, "String",      "2020 Census latitude of the internal point",
+  "INTPTLON20",     12L, "String",      "2020 Census longitude of the internal point",
+  "HOUSING20*",      9L, "Number",          "2020 Census housing unit count",
+      "POP20*",      9L, "Number",       "2020 Census population count"
+  )
+
+```
+
+## function: get_v058_2020()
+
+This function downloads 2020 census block data for a given state, aggregates the population by county, and then calculates the percentage of the population that is rural for each county.
+
+```{r}
+get_v058_2020 <- function(st){
+  # get block data for a state
+  st_block <- blocks(state=st, 
+                     year = 2020) %>% 
+    select(STATEFP20, COUNTYFP20, UR20 , POP20) %>%
+    sf::st_drop_geometry()
+  
+  cols_pop <- c(pop_R = NA_real_, pop_U = NA_real_)
+  
+  # aggregate block data to calculate pct of rural for counties in a state
+  st_r_20 <- st_block %>% 
+    janitor::clean_names() %>% 
+    rename(statecode = statefp20, countycode=countyfp20, ur=ur20) %>% 
+    group_by(statecode, countycode, ur) %>% 
+    summarise(pop20 = sum(pop20, na.rm = TRUE)) %>% 
+    pivot_wider(names_from = ur, 
+                names_glue = "pop_{ur}",
+                values_from = pop20) %>% 
+    # add pop_R or pop_U if not exist; e.g., DC has no pop_R
+    tibble::add_column(!!!cols_pop[!names(cols_pop) %in% names(.)]) %>% 
+    mutate(across(c(pop_R, pop_U), ~if_else(is.na(.x), 0, .x)
+                  )) %>% 
+    mutate(pop_tot = pop_R + pop_U,
+           pct_r = pop_R / pop_tot) %>% 
+    janitor::clean_names()
+  
+  return(st_r_20)
+}
+```
+
+## for loop
+
+```{r}
+ls_states <- sort(c(state.abb, "DC"))
+
+dflist_st_20  <-  list()
+
+# it took ~ 1hr to run
+for(i in seq_along(ls_states)){
+  print(ls_states[i])
+  dflist_st_20[[i]] <- get_v058_2020(ls_states[i]) # add it to your list
+}
+
+data_st_20  <- dflist_st_20 %>% 
+  map_dfr(bind_rows) %>% 
+  ungroup() %>% 
+  glimpse()
+```
+
+## add state, us data
+
+```{r}
+v058 <- bind_rows(
+  # county data
+  data_st_20,
+  # state data
+  data_st_20 %>% 
+    mutate(countycode = "000") %>% 
+    group_by(statecode, countycode) %>% 
+    summarise(across(starts_with("pop"), ~sum(.)) ) %>% 
+    mutate(pct_r = pop_r / pop_tot),
+  # us
+  data_st_20 %>% 
+    mutate(statecode = "00", countycode = "000") %>% 
+    group_by(statecode, countycode) %>% 
+    summarise(across(starts_with("pop"), ~sum(.)) ) %>% 
+    mutate(pct_r = pop_r / pop_tot)
+) %>% 
+  arrange(statecode, countycode)
+
+v058
+```
+
+# Connecticut: new county FIPS codes
+
+## crosswalk: 2020 tracts - 2022 counties
+
+```{r}
+ct_tract_crosswalk <- read_sas("../inputs/ct_tract_crosswalk.sas7bdat") %>% 
+  select(countycode_2020 = county_fipscode_2020, countycode_2022 = county_fipscode_2022, tract_fips_2020 = tract_fipscode_2020) %>% 
+  mutate(statecode = "09") %>% 
+  mutate(across(starts_with("countycode_"), ~str_sub(., 3L, 5L)))
+
+ct_tract_crosswalk
+```
+
+## block data
+```{r}
+ct_block <- blocks(state="CT", 
+                   year = 2020) %>% 
+  select(STATEFP20, COUNTYFP20, TRACTCE20, UR20 , POP20) %>%
+  sf::st_drop_geometry() %>% 
+  janitor::clean_names() %>% 
+  glimpse()
+```
+
+## link blocks to new county FIPS codes
+
+```{r}
+ct_block_linked <- ct_block %>% 
+  rename(statecode = statefp20, countycode_2020 = countyfp20) %>% 
+  mutate(tract_fips_2020 = paste0(statecode, countycode_2020, tractce20), .after = 2) %>% 
+  select(-tractce20) %>% 
+  left_join(ct_tract_crosswalk %>% select(-countycode_2020), 
+            by = c("statecode", "tract_fips_2020"))
+
+ct_block_linked
+```
+
+## calculate rural percentage
+
+```{r}
+cols_pop <- c(pop_R = NA_real_, pop_U = NA_real_)
+
+ct_r_new_cnty <- ct_block_linked %>% 
+  select(statecode, countycode = countycode_2022, ur20, pop20) %>% 
+  group_by(statecode, countycode, ur20) %>% 
+  summarise(pop20 = sum(pop20, na.rm = TRUE), .groups = "drop") %>% 
+  pivot_wider(names_from = ur20, 
+                names_glue = "pop_{ur20}",
+                values_from = pop20) %>% 
+    # add pop_R or pop_U if not exist; e.g., DC has no pop_R
+    tibble::add_column(!!!cols_pop[!names(cols_pop) %in% names(.)]) %>% 
+    mutate(across(c(pop_R, pop_U), ~if_else(is.na(.x), 0, .x)
+                  )) %>% 
+    mutate(pop_tot = pop_R + pop_U,
+           pct_r = pop_R / pop_tot) %>% 
+    janitor::clean_names() %>% 
+  filter(!is.na(countycode))
+
+ct_r_new_cnty
+```
+
+# Add new CT data into v058
+
+```{r}
+CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+  
+v058_2 <- bind_rows(
+  v058,
+  ct_r_new_cnty
+) %>% 
+  arrange(statecode, countycode) %>% 
+  mutate(across(starts_with("p"), 
+                ~if_else(statecode == "09" & countycode %in% CT_old_lst, NA, .))) %>% 
+  rename(v058_numerator = pop_r, v058_denominator = pop_tot, v058_rawvalue = pct_r) %>% 
+  select(-pop_u) %>% 
+  mutate(v058_cilow = NA, v058_cihigh = NA) %>% 
+  glimpse()
+```
+
+# add flag_CT
+
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+v058_3 <- v058_2 %>% 
+  add_flag_CT(vnum = "v058", old="U", new = "A")
+
+v058_3
+```
+
+# save data
+
+```{r}
+write_csv(v058_3,
+          paste0("../measure_datasets/", "v058", "_r2025",
+                 ".csv"),
+          na = "")
+
+```          
+          
+          

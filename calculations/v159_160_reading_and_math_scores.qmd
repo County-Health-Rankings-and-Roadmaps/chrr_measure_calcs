@@ -1,0 +1,248 @@
+---
+title: "v159 reading scores and v160 math scores - R2025"
+author: "HOW"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+## Basic information
+
+-   **Description:** Average grade level performance for 3rd graders on English Language Arts standardized tests.
+
+-   What is the denominator? The total number of students that took the test in each county
+
+Data access
+
+-   Website to downloaded data
+
+<https://edopportunity.org/>
+
+-   Download the files "seda_county_long_CS_5.0 and seda_state_long_CS_5.0."
+
+    County level data is downloaded from the SEDA county tables. Add the grade level (3) to the variable.
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(haven)
+library(here)
+```
+
+# standard county and state fips
+
+-   The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+
+```{r }
+fips <-  bind_rows(
+  haven::read_sas(here("inputs/county_fips_with_ct_old.sas7bdat")),
+  haven::read_sas(here("inputs/state_fips.sas7bdat")))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# import raw data
+
+```{r wrangle  }
+state = read.csv(here("raw_data/SEDA/seda_state_long_cs_5.0.csv")) %>% filter(grade == 3 & year == 2019)
+
+county =  read.csv(here("raw_data/SEDA/seda_county_long_cs_5.0.csv")) %>% filter(grade == 3 & year == 2019)
+
+sc = bind_rows(state, county)
+
+
+# Pad the fips and sedafips columns with leading zeros
+sc$statecode <- str_pad(sc$fips, width = 2, pad = "0")
+sc$fipscode <- str_pad(sc$sedacounty, width = 5, pad = "0")
+sc$countycode = substr(sc$fipscode, 3,5)
+
+# add 3 to all values since this is the grade number
+sctot = sc %>% 
+  mutate(rawvalue = cs_mn_all + 3,
+         race_white = cs_mn_wht + 3,
+         race_black = cs_mn_blk + 3, 
+         race_asian = cs_mn_asn + 3,
+         race_aian = cs_mn_nam + 3, 
+         race_hispanic = cs_mn_hsp + 3) %>% 
+  select(statecode, countycode, rawvalue, race_white, race_black, race_asian, race_aian, race_hispanic, subject)
+
+sctot$countycode[is.na(sctot$countycode)] = "000"
+
+
+
+
+math = sctot %>% filter(subject == "mth")
+read = sctot %>% filter(subject == "rla")
+
+
+mathfips = merge(fips, math, by = c("statecode", "countycode"), all.x = TRUE)
+readfips = merge(fips, read, by = c("statecode", "countycode"), all.x = TRUE)
+
+```
+
+columns of importance are : cs_mn_xxx
+
+-   all - all students
+
+-   nam - native american students
+
+-   asn – Asian or Pacific Islander
+
+-   blk – Black (not Hispanic)
+
+-   hsp – Hispanic
+
+-   wht – White (not Hispanic)
+
+## Reading Scores
+
+```{r v159 reading only}
+
+v159 = readfips %>% select(statecode, countycode, rawvalue) %>% 
+  rename(v159_rawvalue = rawvalue) 
+
+v159$v159_flag_CT = ifelse(is.na(v159$v159_rawvalue) & v159$statecode == "09", "U", 
+                               ifelse(!is.na(v159$v159_rawvalue) & v159$statecode == "09", "A", NA))
+
+
+# Rename columns in readfips that start with "race"
+colnames(readfips) <- ifelse(
+  grepl("^race", colnames(readfips)),
+  paste0("v159_", colnames(readfips)),
+  colnames(readfips)
+)
+
+
+
+# Display the updated column names
+colnames(readfips)
+v159_otherdata = readfips %>% select(-c(subject, state, county, fipscode))
+
+v159_otherdata$v159_flag_CT = ifelse(is.na(v159_otherdata$rawvalue) & v159_otherdata$statecode == "09", "U", 
+                               ifelse(!is.na(v159_otherdata$rawvalue) & v159_otherdata$statecode == "09", "A", NA))
+
+v159_otherdata = v159_otherdata %>% select(-rawvalue)
+
+
+v159_ntl = v159 %>% filter(statecode!= "00" & countycode == "000") %>% summarize(median(v159_rawvalue, na.rm = TRUE)) %>% 
+  rename(v159_rawvalue = 'median(v159_rawvalue, na.rm = TRUE)')
+
+
+ntlrow = data.frame(
+  countycode = "000", 
+  statecode = "00", 
+  v159_flag_CT = NA,
+  v159_rawvalue = v159_ntl)
+
+v159_nontl = v159 %>% filter(statecode !="00")
+
+v159 = rbind(v159_nontl, ntlrow)
+
+
+
+###############################################################
+# ntl vals for subgroups 
+
+# Identify columns that start with "v159_race_"
+race_columns <- grep("^v159_race_", names(v159_otherdata), value = TRUE)
+
+# Filter rows where countycode == "000"
+subset_data <- v159_otherdata[v159_otherdata$countycode == "000" & v159_otherdata$statecode !="00", ]
+
+# Compute the median for each relevant column
+medians <- sapply(subset_data[, race_columns, drop = FALSE], median, na.rm = TRUE)
+
+# Replace the values in the row where countycode == "000" and statecode == "00"
+v159_otherdata[v159_otherdata$countycode == "000" & v159_otherdata$statecode == "00", race_columns] <- medians
+
+# Verify the updated dataset
+print(v159_otherdata[v159_otherdata$countycode == "000" & v159_otherdata$statecode == "00", ])
+
+#save to project 
+readr::write_csv(v159_otherdata, file = here("measure_datasets/v159_subgroup_r2025.csv"))
+
+readr::write_csv(v159, file = here("measure_datasets/v159_r2025.csv"))
+
+
+```
+
+## Math Scores
+
+```{r v160 math only}
+
+v160 = mathfips %>% select(statecode, countycode, rawvalue) %>% 
+  rename(v160_rawvalue = rawvalue) 
+
+v160$v160_flag_CT = ifelse(is.na(v160$v160_rawvalue) & v160$statecode == "09", "U", 
+                               ifelse(!is.na(v160$v160_rawvalue) & v160$statecode == "09", "A", NA))
+
+
+# Rename columns in mathfips that start with "race"
+colnames(mathfips) <- ifelse(
+  grepl("^race", colnames(mathfips)),
+  paste0("v160_", colnames(mathfips)),
+  colnames(mathfips)
+)
+
+
+
+# Display the updated column names
+colnames(mathfips)
+v160_otherdata = mathfips %>% select(-c(subject, state, county, fipscode))
+
+v160_otherdata$v160_flag_CT = ifelse(is.na(v160_otherdata$rawvalue) & v160_otherdata$statecode == "09", "U", 
+                               ifelse(!is.na(v160_otherdata$rawvalue) & v160_otherdata$statecode == "09", "A", NA))
+
+v160_otherdata = v160_otherdata %>% select(-rawvalue)
+
+
+# Calculate the national median (v160_ntl)
+v160_ntl = v160 %>% filter(statecode != "00" & countycode == "000") %>% 
+  summarize(median(v160_rawvalue, na.rm = TRUE)) %>% 
+  rename(v160_rawvalue = 'median(v160_rawvalue, na.rm = TRUE)')
+
+# Create a new row for the national values
+ntlrow = data.frame(
+  countycode = "000", 
+  statecode = "00", 
+  v160_flag_CT = NA,
+  v160_rawvalue = v160_ntl
+)
+
+# Remove the national rows from v160
+v160_nontl = v160 %>% filter(statecode != "00")
+
+# Add the new national row to v160
+v160 = rbind(v160_nontl, ntlrow)
+
+###############################################################
+# Calculate national values for subgroups
+
+# Identify columns that start with "v160_race_"
+race_columns <- grep("^v160_race_", names(v160_otherdata), value = TRUE)
+
+# Filter rows where countycode == "000"
+subset_data <- v160_otherdata[v160_otherdata$countycode == "000" & v160_otherdata$statecode != "00", ]
+
+# Compute the median for each relevant column
+medians <- sapply(subset_data[, race_columns, drop = FALSE], median, na.rm = TRUE)
+
+# Replace the values in the row where countycode == "000" and statecode == "00"
+v160_otherdata[v160_otherdata$countycode == "000" & v160_otherdata$statecode == "00", race_columns] <- medians
+
+# Verify the updated dataset
+print(v160_otherdata[v160_otherdata$countycode == "000" & v160_otherdata$statecode == "00", ])
+
+#save to project 
+readr::write_csv(v160_otherdata, file = here("measure_datasets/v160_subgroup_r2025.csv"))
+
+readr::write_csv(v160, file = here("measure_datasets/v160_r2025.csv"))
+
+```

@@ -1,0 +1,383 @@
+---
+title: "v005 v050 v155 - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## v005 - Preventable Hospital Stays
+
+### Basic information
+
+- Description
+Rate of hospital stays for ambulatory-care sensitive conditions per 100,000 Medicare enrollees.
+
+- What is the numerator?
+The number of discharges for Medicare beneficiaries ages 18 years or older continuously enrolled in Medicare fee-for-service Part A and hospitalized for any of the following reasons: diabetes with short or long-term complications, uncontrolled diabetes without complications, diabetes with lower-extremity amputation, chronic obstructive pulmonary disease, asthma, hypertension, heart failure, dehydration, bacterial pneumonia, or urinary tract infection.
+
+- What is the denominator?
+Medicare beneficiaries ages 18 years or older continuously enrolled in Medicare fee-for-service Part A. Individuals enrolled in Medicare Advantage at any point during the year are excluded from the analysis. In addition, beneficiaries who died during the year, but otherwise were continuously enrolled up until the date of death, as well as beneficiaries who became eligible for enrollment following the first of the year, but were continuously enrolled from that date to the end of the year, are included in the analysis population.
+
+### Raw data access
+
+**Directions**
+
+Go to: https://data.cms.gov/tools/mapping-medicare-disparities-by-population
+
+1. Make sure "Population View" is highlighted.
+
+2. Year: "2022"
+
+3. Geography: "County" and "State/Territory" as a separate download
+
+4. Measure: "Prevention quality indicator (PQI)"
+
+5. Adjustment: "Unsmoothed age standardized"
+
+6. Condition/Service: "Prevention Quality Overall Composite (PQI#90)
+
+7. Click "Download Data"
+
+-National data were accessed by clicking on the map and selecting "trend view."
+
+**Online documentation**
+
+https://www.cms.gov/About-CMS/Agency-Information/OMH/Downloads/Mapping-Technical-Documentation.pdf
+
+## v050 - Mammography Screening
+
+### Basic information#
+
+- Description
+Percentage of female Medicare enrollees ages 65-74 who received an annual mammography screening.
+
+- What is the numerator?
+The number of women ages 65-74 enrolled in Medicare Part B for at least one month of the selected year who have had a mammogram in the last year (Current Procedural Terminology/Healthcare Common Procedure Coding System codes: 77052, 77057, 77063, G0202).
+
+- What is the denominator?
+Female Medicare beneficiaries ages 65-74 enrolled in Medicare Part B for at least one month of the selected year. Individuals enrolled in Medicare Advantage at any point during the year are excluded from this analysis.
+
+### Raw data access
+
+**Directions**
+
+Go to: https://data.cms.gov/tools/mapping-medicare-disparities-by-population
+
+1. Make sure "Population View" is highlighted.
+
+2. Year: "2022"
+
+3. Geography: "County" and "State/Territory" as a separate download
+
+4. Measure: "Preventive Services"
+
+5. Adjustment: "Unsmoothed actual"
+
+6. Condition/Service: "Screening Mammography"
+
+7. Sex: "Female"
+
+8. Age: "65-74"
+
+9. Click "Download Data"
+
+-National data were accessed by clicking on the map and selecting "trend view."
+
+**Online documentation**
+
+https://www.cms.gov/About-CMS/Agency-Information/OMH/Downloads/Mapping-Technical-Documentation.pdf
+
+## v155 - Flu Vaccinations
+
+### Basic information
+
+- Description
+Percentage of fee-for-service (FFS) Medicare enrollees who had an annual flu vaccination.
+
+- What is the numerator?
+The number of Medicare beneficiaries enrolled in fee-for-service Medicare Part B for at least one month of the selected year and who have received a covered influenza vaccine in the last year (Current Procedural Terminology/Healthcare Common Procedure Coding System codes: 90630, 90653-90657, 90660-90662, 90672-90674, 90685-90688, Q2035-Q2039, G0008).
+
+- What is the denominator?
+Medicare beneficiaries enrolled in fee-for-service Medicare Part B for at least one month of the selected year. Individuals enrolled in Medicare Advantage at any point during the year are excluded.
+
+### Raw data access
+
+**Directions**
+
+Go to: https://data.cms.gov/tools/mapping-medicare-disparities-by-population
+
+1. Make sure "Population View" is highlighted.
+
+2. Year: "2022"
+
+3. Geography: "County" and "State/Territory" as a separate download
+
+4. Measure: "Preventive Services"
+
+5. Adjustment: "Unsmoothed age standardized"
+
+6. Condition/Service: "Influenza Virus Vaccine"
+
+7. Click "Download Data"
+
+-National data were accessed by clicking on the map and selecting "trend view."
+
+**Online documentation**
+
+https://www.cms.gov/About-CMS/Agency-Information/OMH/Downloads/Mapping-Technical-Documentation.pdf
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+county_fips <- fips %>% 
+  filter(countycode != "000") %>% 
+  glimpse()
+```
+
+# helpers
+
+## get_mmd_measures
+
+```{r}
+# func: get_mmd_measures ---------
+#' get_mmd_measures(df_cnt, df_state, df_cnt_fips, vnum)
+#' This function helps calculate v005, v050 and v155 
+#'
+#' @param df_cnt df with county data.
+#' @param df_st df with state data.
+#' @param df_cnt_fips df with county fips.
+#' @param vnum measure number.
+#'
+#' @return A dataframe.
+#' @export
+#'
+#' @examples
+#' 
+
+get_mmd_measures <- function(df_cnt, df_st, df_cnt_fips, vnum){
+  # county ----
+  df_cnt_1 <- df_cnt %>%  
+    mutate(fips = str_pad(fips, 5, side = "left", pad = "0")) %>% 
+    mutate(statecode = str_sub(fips, start = 1L, end = 2L),
+           countycode = str_sub(fips, start = 3L, end = 5L),
+           .before = "fips") %>% 
+    select(-c(fips)) %>% 
+    mutate(countycode = case_when(
+      statecode == '02' & countycode == '270' ~ "158",
+      statecode == '46' & countycode == '113' ~ "102",
+      TRUE ~ countycode)) %>% 
+    filter(!(statecode == '51' & countycode %in% c("515", "019")))
+  
+  ## standard county fips -----
+  df_cnt_2 <- df_cnt_fips %>% 
+    select(statecode, countycode) %>% 
+    left_join(df_cnt_1, by = c("statecode", "countycode"))
+  
+  # state ------
+  df_st_1 <- df_st %>% 
+    filter(fips < 57) %>% 
+    mutate(statecode = str_pad(fips, width = 2, side = "left", pad = "0") 
+    ) %>% 
+    mutate(countycode = "000", .after = "statecode") %>% 
+    select(-fips)
+  
+  # combine county and state data, add a row for us-------
+  df_all <- bind_rows(df_cnt_2, df_st_1) %>% 
+    add_row(statecode = "00", countycode = "000") %>% 
+    arrange(statecode, countycode) %>% 
+    mutate(numerator = NA_real_, denominator = NA_real_,
+           cilow = NA_real_, cihigh = NA_real_, sourceflag = NA_real_) %>% 
+    # set rawvalue = 0 as missing
+    mutate(rawvalue = if_else(rawvalue == 0, NA_real_, rawvalue)) |> 
+    rename(!!(paste0(vnum, "_rawvalue")) := rawvalue,
+           !!(paste0(vnum, "_numerator")) := numerator,
+           !!(paste0(vnum, "_denominator")) := denominator,
+           !!(paste0(vnum, "_cilow")) := cilow,
+           !!(paste0(vnum, "_cihigh")) := cihigh,
+           !!(paste0(vnum, "_sourceflag")) := sourceflag)
+  
+  print(paste0("number of rows: ", nrow(df_all)))
+  
+  return(df_all)
+}
+```
+
+## add flag_CT
+
+- This function adds a flag to the data frame for Connecticut counties.
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+```
+
+# raw data
+
+- each measure has a county and state data file
+- all the csv files are zipped in a single file for easy transfer
+
+# v005
+
+## import raw data
+
+```{r}
+raw_dir <- "../raw_data/MMD_v005_050_155/MMD_raw.zip"
+
+v005_ct <- read_csv(
+  unz(raw_dir, "PQI_90_county.csv"),
+                       skip = 0) %>% 
+  janitor::clean_names() %>% 
+  select(fips, rawvalue = analysis_value)
+
+v005_st <- read_csv(
+  unz(raw_dir, "PQI_90_state.csv"),
+                       skip = 0) %>% 
+  janitor::clean_names() %>% 
+  select(fips, rawvalue = analysis_value) 
+
+```
+
+## process data
+
+```{r}
+v005 <- get_mmd_measures(df_cnt = v005_ct, 
+                         df_st = v005_st, 
+                         df_cnt_fips = county_fips, 
+                         vnum = "v005") %>% 
+  # add us data: National data were from MMD website by clicking on the map and selecting "trend view."
+  mutate(v005_rawvalue= if_else(statecode == "00", 2666, v005_rawvalue)) %>% 
+  arrange(statecode, countycode) %>% 
+  add_flag_CT(vnum = "v005", old="A", new = "U") %>% 
+  glimpse()
+```
+
+## save data
+
+```{r}
+write_csv(v005,
+          paste0("../measure_datasets/", "v005", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+# v050
+## import raw data
+
+```{r}
+v050_ct <- read_csv(
+  unz(raw_dir, "screening_mammography_county.csv"),
+  skip = 0) %>% 
+  janitor::clean_names() %>% 
+  select(fips, rawvalue = analysis_value)
+
+v050_st <- read_csv(
+  unz(raw_dir, "screening_mammography_state.csv"),
+  skip = 0) %>% 
+  janitor::clean_names() %>% 
+  select(fips, rawvalue = analysis_value) 
+
+```
+
+## process data
+
+```{r}
+v050 <- get_mmd_measures(df_cnt = v050_ct, 
+                         df_st = v050_st, 
+                         df_cnt_fips = county_fips, 
+                         vnum = "v050") %>% 
+  # add us data: National data were from MMD website by clicking on the map and selecting "trend view."
+  mutate(v050_rawvalue= if_else(statecode == "00", .44, v050_rawvalue/100)) |> 
+  arrange(statecode, countycode) %>% 
+  add_flag_CT(vnum = "v050", old="A", new = "U")
+
+v050
+```
+
+## save data
+
+```{r}
+write_csv(v050,
+          paste0("../measure_datasets/", "v050", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+# v155
+## import raw data
+
+```{r}
+v155_ct <- read_csv(
+  unz(raw_dir, "influenza_virus_vaccine_county.csv"),
+  skip = 0) %>% 
+  janitor::clean_names() %>% 
+  select(fips, rawvalue = analysis_value)
+
+v155_st <- read_csv(
+  unz(raw_dir, "influenza_virus_vaccine_state.csv"),
+  skip = 0) %>% 
+  janitor::clean_names() %>% 
+  select(fips, rawvalue = analysis_value) 
+
+```
+
+## process data
+
+```{r}
+v155 <- get_mmd_measures(df_cnt = v155_ct, 
+                         df_st = v155_st, 
+                         df_cnt_fips = county_fips, 
+                         vnum = "v155") %>% 
+  # add us data: National data were from MMD website by clicking on the map and selecting "trend view."
+  mutate(v155_rawvalue= if_else(statecode == "00", .48, v155_rawvalue/100)) %>% 
+  arrange(statecode, countycode) %>% 
+  add_flag_CT(vnum = "v155", old="A", new = "U") 
+
+v155
+```
+
+## save data
+
+```{r}
+write_csv(v155,
+          paste0("../measure_datasets/", "v155", "_r2025",
+                 ".csv"),
+          na = "")
+```
+

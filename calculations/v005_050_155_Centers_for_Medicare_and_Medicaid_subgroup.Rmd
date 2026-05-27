@@ -1,0 +1,580 @@
+---
+title: "v005 v050 v155 subgroup - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(haven)
+
+# data shared for SAS, R
+data_dir_2025 <- 'C:/01_CHRR/data/r2025'
+```
+
+# about
+
+## v005 - Preventable Hospital Stays
+
+### Basic information
+
+- Description
+Rate of hospital stays for ambulatory-care sensitive conditions per 100,000 Medicare enrollees.
+
+- What is the numerator?
+The number of discharges for Medicare beneficiaries ages 18 years or older continuously enrolled in Medicare fee-for-service Part A and hospitalized for any of the following reasons: diabetes with short or long-term complications, uncontrolled diabetes without complications, diabetes with lower-extremity amputation, chronic obstructive pulmonary disease, asthma, hypertension, heart failure, dehydration, bacterial pneumonia, or urinary tract infection.
+
+- What is the denominator?
+Medicare beneficiaries ages 18 years or older continuously enrolled in Medicare fee-for-service Part A. Individuals enrolled in Medicare Advantage at any point during the year are excluded from the analysis. In addition, beneficiaries who died during the year, but otherwise were continuously enrolled up until the date of death, as well as beneficiaries who became eligible for enrollment following the first of the year, but were continuously enrolled from that date to the end of the year, are included in the analysis population.
+
+### Raw data access
+
+**Directions**
+
+Go to: https://data.cms.gov/tools/mapping-medicare-disparities-by-population
+
+1. Make sure "Population View" is highlighted.
+
+2. Year: "2022"
+
+3. Geography: "County" and "State/Territory" as a separate download
+
+4. Measure: "Prevention quality indicator (PQI)"
+
+5. Adjustment: "Unsmoothed age standardized"
+
+6. Condition/Service: "Prevention Quality Overall Composite (PQI#90)
+
+7. Under "Race and ethnicity" select "White," "Black," "Hispanic," "Asian/Pacific islander" and "American Indian/Alaskan native" as separate downloads
+
+-National data were accessed by clicking on the map and selecting "trend view."
+
+**Online documentation**
+
+https://www.cms.gov/About-CMS/Agency-Information/OMH/Downloads/Mapping-Technical-Documentation.pdf
+
+## v050 - Mammography Screening
+
+### Basic information#
+
+- Description
+Percentage of female Medicare enrollees ages 65-74 who received an annual mammography screening.
+
+- What is the numerator?
+The number of women ages 65-74 enrolled in Medicare Part B for at least one month of the selected year who have had a mammogram in the last year (Current Procedural Terminology/Healthcare Common Procedure Coding System codes: 77052, 77057, 77063, G0202).
+
+- What is the denominator?
+Female Medicare beneficiaries ages 65-74 enrolled in Medicare Part B for at least one month of the selected year. Individuals enrolled in Medicare Advantage at any point during the year are excluded from this analysis.
+
+### Raw data access
+
+**Directions**
+
+Go to: https://data.cms.gov/tools/mapping-medicare-disparities-by-population
+
+1. Make sure "Population View" is highlighted.
+
+2. Year: "2022"
+
+3. Geography: "County" and "State/Territory" as a separate download
+
+4. Measure: "Preventive Services"
+
+5. Adjustment: "Unsmoothed actual"
+
+6. Condition/Service: "Screening Mammography"
+
+7. Sex: "Female"
+
+8. Age: "65-74"
+
+9. Under "Race and ethnicity" select "White," "Black," "Hispanic," "Asian/Pacific islander" and "American Indian/Alaskan native" as separate downloads
+
+-National data were accessed by clicking on the map and selecting "trend view."
+
+**Online documentation**
+
+https://www.cms.gov/About-CMS/Agency-Information/OMH/Downloads/Mapping-Technical-Documentation.pdf
+
+## v155 - Flu Vaccinations
+
+### Basic information
+
+- Description
+Percentage of fee-for-service (FFS) Medicare enrollees who had an annual flu vaccination.
+
+- What is the numerator?
+The number of Medicare beneficiaries enrolled in fee-for-service Medicare Part B for at least one month of the selected year and who have received a covered influenza vaccine in the last year (Current Procedural Terminology/Healthcare Common Procedure Coding System codes: 90630, 90653-90657, 90660-90662, 90672-90674, 90685-90688, Q2035-Q2039, G0008).
+
+- What is the denominator?
+Medicare beneficiaries enrolled in fee-for-service Medicare Part B for at least one month of the selected year. Individuals enrolled in Medicare Advantage at any point during the year are excluded.
+
+### Raw data access
+
+**Directions**
+
+Go to: https://data.cms.gov/tools/mapping-medicare-disparities-by-population
+
+1. Make sure "Population View" is highlighted.
+
+2. Year: "2022"
+
+3. Geography: "County" and "State/Territory" as a separate download
+
+4. Measure: "Preventive Services"
+
+5. Adjustment: "Unsmoothed age standardized"
+
+6. Condition/Service: "Influenza Virus Vaccine"
+
+7. Under "Race and ethnicity" select "White," "Black," "Hispanic," "Asian/Pacific islander" and "American Indian/Alaskan native" as separate downloads
+
+-National data were accessed by clicking on the map and selecting "trend view."
+
+**Online documentation**
+
+https://www.cms.gov/About-CMS/Agency-Information/OMH/Downloads/Mapping-Technical-Documentation.pdf
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+county_fips <- fips %>% 
+  filter(countycode != "000") %>% 
+  glimpse()
+```
+
+
+# helpers 
+
+## read_mmd_csv_by_race()
+
+```{r}
+# func: read_mmd_csv_by_race() -----
+#' read_mmd_csv_by_race(dir, vnum, race)
+#' This function helps import csv files for subgroup calculation by reading 
+#' in a csv, selecting columns, and adding a column named with 
+#' vnum and race 
+#'
+#' @param dir directory of the csv file.
+#' @param vnum measure number, e.g., v005.
+#' @param race race, e.g., white, black, etc..
+#'
+#' @return A dataframe in wide format.
+#' @export
+#'
+#' @examples
+#' 
+read_mmd_csv_by_race <- function(dir, vnum, race){
+  df <- read_csv(dir, 
+                 col_types = cols() # supress message
+                 ) %>% 
+    janitor::clean_names() %>% 
+    select(fips, rawvalue = analysis_value) %>% 
+    mutate(vnum_race = paste0(vnum, "_race_", race)  ) 
+  # rename(!!(paste0(vnum,"_race_", race)) := rawvalue)
+  
+  if (vnum == "v050" | vnum == "v155") {
+    df <- df %>% 
+      mutate(rawvalue = rawvalue/100)
+  }
+  
+  return(df)
+}  
+```
+
+## get_mmd_measure_by_race()
+
+```{r}
+# func: get_mmd_measure_by_race ------
+#' get_mmd_measure_by_race(df_byrace, df_fips)
+#' This function helps calculate v005, v050 and v155 by subgroup (i.e., race)
+#'
+#' @param df_byrace df with county and state data in long format.
+#' @param df_fips df with all county, state, and US fips.
+#'
+#' @return A dataframe in wide format.
+#' @export
+#'
+#' @examples
+#' 
+get_mmd_measure_by_race <- function(df_byrace, df_fips){
+  df_byrace_1 <- df_byrace %>%  
+    filter(rawvalue != 0) %>% 
+    mutate(
+      statecode = case_when(
+        fips < 100 ~ str_pad(fips, 2, "left", "0"),
+        fips > 1000 ~ str_sub(str_pad(fips, 5, "left", "0"), 1L, 2L)),
+      countycode = case_when(
+        fips < 100 ~ "000",
+        fips > 1000 ~ str_sub(str_pad(fips, 5, "left", "0"), 3L, 5L))
+    )  %>% 
+    filter(as.numeric(statecode) < 57) %>% 
+    filter(countycode != "990") %>% 
+    mutate(countycode = case_when(
+      statecode == '02' & countycode == '270' ~  '158',
+      statecode == '46' & countycode == '113' ~ '102',
+      TRUE ~ countycode)
+    ) %>% 
+    filter(!(statecode == '51' & countycode %in% c("515", "019"))) %>% 
+    select(-fips) %>% 
+    pivot_wider(names_from = vnum_race, values_from = rawvalue)
+  
+  # standard fips -----
+  res <- df_fips %>% 
+    select(statecode, countycode) %>% 
+    left_join(df_byrace_1, by = c("statecode", "countycode"))
+  
+  return(res)
+}
+```
+
+## add_us_val_byrace()
+
+```{r}
+# func: add_us_val_byrace() -------
+#' add_us_val_byrace(df_byrace, vnum, us_val_White, us_val_black, us_val_hisp,  us_val_asian, us_val_AIAN)
+#' This function helps calculate v005, v050 and v155 by subgroup (i.e., race)
+#'
+#' @param df_byrace df with county and state data .
+#' @param vnum measure number, e.g., v005.
+#' @param us_val_White national value for white.
+#' @param us_val_black national value for black.
+#' @param us_val_hisp national value for hispanic.
+#' @param us_val_asian national value for asian
+#' @param us_val_AIAN national value for AIAN.
+#'
+#' @return A dataframe in wide format.
+#' @export
+#'
+#' @examples
+#' 
+add_us_val_byrace <- function(df_byrace, 
+                              vnum,
+                              us_val_White, 
+                              us_val_black,
+                              us_val_hisp, 
+                              us_val_asian, 
+                              us_val_AIAN){
+  #construct a dataframe with us values
+  df_us <- tibble(statecode = "00", countycode = "000",
+                  race_AIAN = us_val_AIAN, 
+                  race_asian = us_val_asian,
+                  race_black = us_val_black, 
+                  race_hispanic = us_val_hisp,
+                  race_white = us_val_White) %>% 
+    rename(!!(paste0(vnum, "_race_AIAN")) := race_AIAN,
+           !!(paste0(vnum, "_race_asian")) := race_asian,
+           !!(paste0(vnum, "_race_black")) := race_black,
+           !!(paste0(vnum, "_race_hispanic")) := race_hispanic,
+           !!(paste0(vnum, "_race_white")) := race_white
+    )
+  # combine us data with county and state data 
+  df_byrace_1 <- df_byrace %>% 
+    filter(statecode != "00") %>% 
+    bind_rows(df_us) %>% 
+    arrange(statecode, countycode)
+  
+  return(df_byrace_1)
+}
+```
+
+
+## add flag_CT
+
+- This function adds a flag to the data frame for Connecticut counties.
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+```
+
+# raw data
+
+- for each measure: 5 csv files for white, black, hispanic, asian, AIAN at county level, respectively
+- for each measure: 5 csv files for white, black, hispanic, asian, AIAN at state level, respectively
+- create a df to list all csv files for convenience
+
+## df with csv file names, race, geo (county/state), vnum (measure number)
+
+-   This dataframe provides info helpful when importing csv files in batch mode
+```{r}
+raw_dir <- "../raw_data/MMD_v005_050_155/MMD_raw.zip"
+
+files <- as.character(unzip(raw_dir, list = TRUE)$Name)  # get file names
+
+df_files <- files %>% 
+  as_tibble() %>% 
+  rename(fil_name = value) %>% 
+  mutate(vnum = case_when(
+    str_detect(fil_name, "PQI") ~ "v005",
+    str_detect(fil_name, "screening_mammography") ~ "v050",
+    str_detect(fil_name, "influenza") ~ "v155"
+  )) %>% 
+  mutate(geo = case_when(
+    str_detect(fil_name, "county") ~ "county",
+    str_detect(fil_name, "state") ~ "state"
+  )) %>% 
+  mutate(race = case_when(
+    str_detect(fil_name, "AIAN") ~ "AIAN",
+    str_detect(fil_name, "asian") ~ "asian",
+    str_detect(fil_name, "black") ~ "black",
+    str_detect(fil_name, "hispanic") ~ "hispanic",
+    str_detect(fil_name, "white") ~ "white",
+    TRUE ~ NA)
+    ) %>% 
+  filter(!is.na(race))
+
+df_files
+```
+
+# v005_otherdata
+
+## import data
+
+-   use function read_mmd_csv_by_race() to read in the 10 files and combine them into one dataframe (in long format)
+
+```{r}
+# list of csv files for v005
+df_files_v005 <- df_files %>%
+  filter(vnum == "v005") %>%
+  select(fil_name, vnum, race)
+
+# read in all 10 csv for v005 subgroups; combine them in one df
+v005_byrace <- 
+  pmap(
+    list(
+      df_files_v005$fil_name,
+      df_files_v005$vnum, 
+      df_files_v005$race
+      ),
+    function(x, y, z) {
+      read_mmd_csv_by_race(
+        unz(raw_dir, x), y, z
+        )
+      }
+) %>%
+  reduce(bind_rows) %>%
+  glimpse()
+
+```
+
+## process data
+
+```{r}
+v005_byrace_1 <- 
+  get_mmd_measure_by_race(
+    df_byrace = v005_byrace, 
+    df_fips = fips) %>% 
+  glimpse()
+```
+
+## add us data
+
+National data were from MMD website by clicking on the map and selecting "trend view."
+
+```{r}
+v005_byrace_2 <- 
+  add_us_val_byrace(
+    df_byrace = v005_byrace_1,
+    vnum = "v005",
+    us_val_White = 2529, 
+    us_val_black = 4268,
+    us_val_hisp  = 2758, 
+    us_val_asian = 1576, 
+    us_val_AIAN  = 4000) %>% 
+  glimpse()
+
+```
+
+## add 'flag_CT'
+
+```{r}
+v005_byrace_3 <- v005_byrace_2 %>% 
+  add_flag_CT(vnum = "v005_race", old="A", new = "U") 
+
+v005_byrace_3
+```
+
+## save data
+
+```{r}
+write_csv(v005_byrace_3,
+          paste0("../measure_datasets/", "v005_otherdata", "_r2025",
+                 ".csv"),
+          na = ""
+          )
+```
+
+# v050_otherdata
+
+## import data
+
+```{r message=FALSE, warning=FALSE}
+df_files_v050 <- df_files %>%
+  filter(vnum == "v050") %>%
+  select(fil_name, vnum, race)
+
+## read in all 10 csv for v005 subgroups; combine them in one df ----
+v050_byrace <- pmap(
+  list(
+    df_files_v050$fil_name,
+    df_files_v050$vnum,
+    df_files_v050$race
+  ),
+  function(x, y, z) {
+    read_mmd_csv_by_race(
+      unz(raw_dir, x),
+      y, z
+    )
+  }
+) %>%
+  reduce(bind_rows) %>%
+  glimpse()
+
+```
+
+## process data
+
+```{r}
+v050_byrace_1 <- 
+  get_mmd_measure_by_race(
+    df_byrace = v050_byrace, 
+    df_fips = fips) %>% 
+  glimpse()
+```
+
+## add us data
+
+```{r}
+# add us data 
+v050_byrace_2 <- 
+  add_us_val_byrace(
+    df_byrace = v050_byrace_1,
+    vnum = "v050",
+    us_val_White = 0.46, 
+    us_val_black = 0.40,
+    us_val_hisp  = 0.30, 
+    us_val_asian = 0.34, 
+    us_val_AIAN  = 0.29)
+
+v050_byrace_2
+```
+
+## add 'flag_CT'
+
+```{r}
+v050_byrace_3 <- v050_byrace_2 %>% 
+  add_flag_CT(vnum = "v050_race", old="A", new = "U")
+
+v050_byrace_3
+```
+
+## save data
+
+```{r}
+write_csv(v050_byrace_3,
+          paste0("../measure_datasets/", "v050_otherdata", "_r2025",
+                 ".csv"),
+          na = ""
+          )
+```
+
+# v155_otherdata
+
+## import data
+
+```{r message=FALSE}
+df_files_v155 <- df_files %>%
+  filter(vnum == "v155") %>%
+  select(fil_name, vnum, race)
+
+## read in all 10 csv for v005 subgroups; combine them in one df ----
+v155_byrace <-
+  pmap(
+    list(
+      df_files_v155$fil_name,
+      df_files_v155$vnum, 
+      df_files_v155$race
+      ),
+    function(x, y, z) {
+      read_mmd_csv_by_race(
+        unz(raw_dir, x), y, z
+        )
+      }
+) %>%
+  reduce(bind_rows) %>%
+  glimpse()
+```
+
+## process data
+
+```{r}
+v155_byrace_1 <- 
+  get_mmd_measure_by_race(
+    df_byrace = v155_byrace, 
+    df_fips = fips) %>% 
+  glimpse()
+```
+
+## add us data
+
+```{r}
+# add us data 
+v155_byrace_2 <- 
+  add_us_val_byrace(
+    df_byrace = v155_byrace_1,
+    vnum = "v155",
+    us_val_White = 0.50, 
+    us_val_black = 0.36,
+    us_val_hisp = 0.33, 
+    us_val_asian = 0.49, 
+    us_val_AIAN = 0.37) %>% 
+  glimpse()
+
+v155_byrace_2
+
+```
+
+## add 'flag_CT'
+
+```{r}
+v155_byrace_3 <- v155_byrace_2 %>% 
+  add_flag_CT(vnum = "v155_race", old="A", new = "U")
+
+v155_byrace_3
+```
+
+## save data
+
+```{r}
+write_csv(v155_byrace_3,
+          paste0("../measure_datasets/", "v155_otherdata", "_r2025",
+                 ".csv"),
+          na = ""
+          )
+```

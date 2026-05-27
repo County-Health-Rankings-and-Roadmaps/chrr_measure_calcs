@@ -1,0 +1,499 @@
+---
+title: "BRFSS v002, v009, v144, v145, 143 - R2025"
+author: "GL"
+date: "2024-09-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## v002 
+
+### Basic information
+
+- Description
+Percentage of adults reporting fair or poor health (age-adjusted).
+
+- What is the numerator?
+The numerator is the total number of respondents who answered "Would you say that in general your health is Excellent/Very good/Good/Fair/Poor?" with fair or poor.
+
+- What is the denominator?
+The denominator is the total number of adult respondents in a county.
+
+### Raw data access
+
+**Directions**
+
+Two datasets are required
+
+(1) PLACES https://data.cdc.gov/500-Cities-Places/PLACES-County-Data-GIS-Friendly-Format-2024-releas/i46a-9kgh
+
+(2) U.S. Chronic Disease Indicators (CDI) https://data.cdc.gov/Chronic-Disease-Indicators/U-S-Chronic-Disease-Indicators/hksd-2xuw
+
+PLACES dataset is used to obtain county values: "ghlth_adjprev", "ghlth_adj95CI" 
+
+CDI dataset is used to obtain state values: where question = “Fair or poor self-rated health status among adults”
+
+When downloading CDI dataset, include the following filters:
+- YearStart: "2022"
+- YearEnd: "2022"
+- DataValueTypeID: "AGEADJPREV"     (keep data for age-adjusted prevalence)
+- StratificationCategoryID1: "OVERALL"     (keep data for overall population)
+
+**Online documentation**
+
+https://www.cdc.gov/places/methodology/index.html
+
+## v009 Adult Smoking
+
+### Basic information
+
+- Description
+Percentage of adults who are current smokers (age-adjusted).
+
+- What is the numerator?
+The numerator is the number of adult respondents who reported “Yes” to the following question: Have you smoked at least 100 cigarettes in your entire life? and “Every day or some days” to the question: Do you now smoke cigarettes every day, some days, or not at all?
+
+- What is the denominator?
+The denominator is the total number of adult respondents in a county.
+
+### Raw data access
+
+**Directions**
+
+Two datasets are required
+
+(1) PLACES https://data.cdc.gov/500-Cities-Places/PLACES-County-Data-GIS-Friendly-Format-2024-releas/i46a-9kgh
+
+(2) U.S. Chronic Disease Indicators (CDI) https://data.cdc.gov/Chronic-Disease-Indicators/U-S-Chronic-Disease-Indicators/hksd-2xuw
+
+PLACES dataset is used to obtain county values: "csmoking_adjprev", "csmoking_adj95CI" 
+
+CDI dataset is used to obtain state values: where question = “Current cigarette smoking among adults”
+
+When downloading CDI dataset, include the following filters:
+- YearStart: "2022"
+- YearEnd: "2022"
+- DataValueTypeID: "AGEADJPREV"     (keep data for age-adjusted prevalence)
+- StratificationCategoryID1: "OVERALL"     (keep data for overall population)
+
+**Online documentation**
+
+https://www.cdc.gov/places/methodology/index.html
+
+## v144 Frequent Physical Distress
+
+### Basic information
+
+- Description
+Percentage of adults reporting 14 or more days of poor physical health per month (age-adjusted).
+
+- What is the numerator?
+The numerator is the number of adults who reported 14 or more days in response to the question, “Now thinking about your physical health, which includes physical illness and injury, for how many days during the past 30 days was your physical health not good?”
+
+- What is the denominator?
+The denominator is the total number of adult respondents in a county.
+
+### Raw data access
+
+**Directions**
+
+Two datasets are required
+
+(1) PLACES https://data.cdc.gov/500-Cities-Places/PLACES-County-Data-GIS-Friendly-Format-2024-releas/i46a-9kgh
+
+(2) U.S. Chronic Disease Indicators (CDI) https://data.cdc.gov/Chronic-Disease-Indicators/U-S-Chronic-Disease-Indicators/hksd-2xuw
+
+PLACES dataset is used to obtain county values: "phlth_adjprev", "phlth_adj95ci" 
+
+CDI dataset is used to obtain state values: where question = “Frequent physical distress among adults”
+
+When downloading CDI dataset, include the following filters:
+- YearStart: "2022"
+- YearEnd: "2022"
+- DataValueTypeID: "AGEADJPREV"     (keep data for age-adjusted prevalence)
+- StratificationCategoryID1: "OVERALL"     (keep data for overall population)
+
+**Online documentation**
+
+https://www.cdc.gov/places/methodology/index.html
+
+## v145 Frequent Mental Distress
+
+### Basic information
+
+- Description
+Percentage of adults reporting 14 or more days of poor mental health per month (age-adjusted).
+
+- What is the numerator?
+The numerator is the number of adults who reported 14 or more days in response to the question, “Now, thinking about your mental health, which includes stress, depression, and problems with emotions, for how many days during the past 30 days was your mental health not good?”
+
+- What is the denominator?
+The denominator is the total number of adult respondents in a county.
+
+### Raw data access
+
+**Directions**
+
+Two datasets are required
+
+(1) PLACES https://data.cdc.gov/500-Cities-Places/PLACES-County-Data-GIS-Friendly-Format-2024-releas/i46a-9kgh
+
+(2) U.S. Chronic Disease Indicators (CDI) https://data.cdc.gov/Chronic-Disease-Indicators/U-S-Chronic-Disease-Indicators/hksd-2xuw
+
+PLACES dataset is used to obtain county values: "mhlth_adjprev", "mhlth_adj95ci" 
+
+CDI dataset is used to obtain state values: where question = “Frequent mental distress among adults”
+
+When downloading CDI dataset, include the following filters:
+- YearStart: "2022"
+- YearEnd: "2022"
+- DataValueTypeID: "AGEADJPREV"     (keep data for age-adjusted prevalence)
+- StratificationCategoryID1: "OVERALL"     (keep data for overall population)
+
+**Online documentation**
+
+https://www.cdc.gov/places/methodology/index.html
+
+## v143 
+
+### Basic information
+
+- Description
+Percentage of adults who report fewer than 7 hours of sleep on average (age-adjusted).
+
+- What is the numerator?
+The numerator is the number of adults who responded to the following question by stating they sleep less than 7 hours per night: “On average, how many hours of sleep do you get in a 24-hour period?"
+
+- What is the denominator?
+The denominator is the total number of adult respondents in a county.
+
+### Raw data access
+
+**Directions**
+
+Two datasets are required
+
+(1) PLACES https://data.cdc.gov/500-Cities-Places/PLACES-County-Data-GIS-Friendly-Format-2024-releas/i46a-9kgh
+
+(2) U.S. Chronic Disease Indicators (CDI) https://data.cdc.gov/Chronic-Disease-Indicators/U-S-Chronic-Disease-Indicators/hksd-2xuw
+
+PLACES dataset is used to obtain county values: "sleep_adjprev", "sleep_adj95ci" 
+
+CDI dataset is used to obtain state values: where question = “Short sleep duration among adults”
+
+When downloading CDI dataset, include the following filters:
+- YearStart: "2022"
+- YearEnd: "2022"
+- DataValueTypeID: "AGEADJPREV"     (keep data for age-adjusted prevalence)
+- StratificationCategoryID1: "OVERALL"     (keep data for overall population)
+
+**Online documentation**
+
+https://www.cdc.gov/places/methodology/index.html
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+df_county_fips <- fips %>% 
+  filter(countycode != "000") %>%  
+  select(1,2,5) %>% 
+  glimpse()
+
+df_state_fips <- fips %>% 
+  filter(countycode == "000") %>% 
+  select(statecode, countycode, state_abbr = state) %>% 
+  glimpse()
+```
+
+# raw data
+
+## PLACES 2024 release (2022 data ) - county data
+
+```{r}
+raw_dir <- "../raw_data/BRFSS/BRFSS_raw.zip"
+
+places_brfss_county <-  
+  read_csv(
+    unz(raw_dir, "PLACES__County_Data__GIS_Friendly_Format___2024_release_20250107.csv")
+    ) %>%
+  janitor::clean_names() %>% 
+  glimpse()
+```
+
+## US CDI - 2022 state data 
+
+```{r}
+us_cdi_st <-  
+  read_csv(
+    unz(raw_dir, "U.S._Chronic_Disease_Indicators_2022_all_20240826.csv")
+    ) %>% 
+  janitor::clean_names() %>% 
+  glimpse()
+```
+
+# helpers
+
+## get county data
+```{r}
+get_vx_county <- function(df, vnum, var_adj, var_ci, df_fips_cnty = df_county_fips){
+  
+  vx_county_raw <- df %>% 
+    select(state_abbr, county_name, county_fips,
+           {{ var_adj }}, {{ var_ci }})
+  
+  vx_county_cleaned <- vx_county_raw %>% 
+    mutate({{ var_ci }} := str_remove_all({{ var_ci }}, "[\\(\\)]")) %>% 
+    separate({{ var_ci }}, c("vx_cilow", "vx_cihigh"), sep = ",") %>% 
+    rename(fipscode = county_fips, vx_rawvalue = {{ var_adj }}) %>% 
+    mutate(vx_rawvalue = vx_rawvalue / 100,
+           vx_cilow = as.numeric(vx_cilow) / 100,
+           vx_cihigh = as.numeric(vx_cihigh) / 100) %>% 
+    rename(!!(paste0(vnum, "_rawvalue")) := vx_rawvalue,
+           !!(paste0(vnum, "_cilow")) := vx_cilow,
+           !!(paste0(vnum, "_cihigh")) := vx_cihigh)
+  
+  vx_county <- df_fips_cnty %>%
+    left_join(vx_county_cleaned,
+              by = "fipscode") %>% 
+    select(-c(fipscode,state_abbr,county_name))
+  
+  return(vx_county)
+  
+}
+```
+
+## get state data
+
+```{r}
+get_vx_state_from_cdi <- function(df, vnum, q_id, df_fips_st = df_state_fips){
+  vx_st_1 <- df %>% 
+    filter(question_id == q_id) %>% 
+    select(state_abbr = location_abbr, 
+           !!(paste0(vnum, "_rawvalue")) := data_value, 
+           !!(paste0(vnum, "_cilow")) := low_confidence_limit, 
+           !!(paste0(vnum, "_cihigh")) := high_confidence_limit
+    )
+  
+  vx_st <- df_fips_st %>% 
+    left_join(vx_st_1, by = "state_abbr") %>% 
+    select(-c(state_abbr)) %>% 
+    mutate_if(is.numeric, list(~ . / 100))
+  
+  return(vx_st)
+  
+}
+
+```
+
+## add flag_CT
+
+- This function adds a flag to the data frame for Connecticut counties.
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+```
+
+# v002 Poor or Fair Health
+
+## process data
+
+```{r}
+v002 <-
+  bind_rows(
+    # county data
+    get_vx_county(
+      df = places_brfss_county,
+      vnum = "v002",
+      var_adj = ghlth_adj_prev,
+      var_ci = ghlth_adj95ci
+    ),
+    # state + us data
+    get_vx_state_from_cdi(
+      df = us_cdi_st,
+      vnum = "v002",
+      q_id = "HEA01"
+    )
+  ) %>%
+  arrange(statecode, countycode) %>%
+  add_flag_CT(vnum = "v002", old="U", new = "A") %>% 
+  glimpse()
+```
+
+##  save data
+
+```{r}
+write_csv(v002,
+          paste0("../measure_datasets/", "v002", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+
+# v009 Adult smoking
+
+## process data
+
+```{r}
+v009 <- bind_rows(
+  # county data
+  get_vx_county(
+    df = places_brfss_county,
+    vnum = "v009",
+    var_adj = csmoking_adj_prev,
+    var_ci = csmoking_adj95ci
+  ),
+  # state + us data
+  get_vx_state_from_cdi(
+    df = us_cdi_st,
+    vnum = "v009",
+    q_id = "TOB04"
+  )
+) %>%
+  arrange(statecode, countycode) %>%
+  add_flag_CT(vnum = "v009", old="U", new = "A") %>% 
+  glimpse()
+```
+
+##  save data
+
+```{r}
+write_csv(v009,
+          paste0("../measure_datasets/", "v009", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+
+# v143 Insufficient Sleep
+
+## process data
+
+```{r}
+v143 <- bind_rows(
+  # county data
+  get_vx_county(
+    df = places_brfss_county,
+    vnum = "v143",
+    var_adj = sleep_adj_prev,
+    var_ci = sleep_adj95ci
+  ),
+  # state + us data
+  get_vx_state_from_cdi(
+    df = us_cdi_st,
+    vnum = "v143",
+    q_id = "SLP03"
+  )
+) %>%
+  arrange(statecode, countycode) %>%
+  add_flag_CT(vnum = "v143", old = "U", new = "A") %>%
+  glimpse()
+```
+
+##  save data
+
+```{r}
+write_csv(v143,
+          paste0("../measure_datasets/", "v143", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+# v144 Frequent Physical Distress
+
+## process data
+
+```{r}
+v144 <-  bind_rows(
+  # county data# 
+  get_vx_county(df = places_brfss_county,
+                             vnum = "v144",
+                             var_adj = phlth_adj_prev,
+                             var_ci = phlth_adj95ci), 
+  # state + us data
+  get_vx_state_from_cdi(df = us_cdi_st, 
+                                    vnum = "v144", 
+                                    q_id = "HEA03")
+  ) %>% 
+  arrange(statecode, countycode) %>% 
+  add_flag_CT(vnum = "v144", old="U", new = "A") %>% 
+  glimpse()
+```
+
+##  save data
+
+```{r}
+write_csv(v144,
+          paste0("../measure_datasets/", "v144", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+# v145 Frequent Mental Distress
+
+## process data
+
+```{r}
+v145 <- bind_rows(
+  get_vx_county(
+    df = places_brfss_county,
+    vnum = "v145",
+    var_adj = mhlth_adj_prev,
+    var_ci = mhlth_adj95ci
+  ),
+  get_vx_state_from_cdi(
+    df = us_cdi_st,
+    vnum = "v145",
+    q_id = "MEN05"
+  )
+) %>%
+  arrange(statecode, countycode) %>%
+  add_flag_CT(vnum = "v145", old="U", new = "A") %>% 
+  glimpse()
+```
+##  save data
+
+```{r}
+write_csv(v145,
+          paste0("../measure_datasets/", "v145", "_r2025",
+                 ".csv"),
+          na = "")
+```
+

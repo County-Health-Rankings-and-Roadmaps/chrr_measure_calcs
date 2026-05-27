@@ -1,0 +1,181 @@
+---
+title: "v172 Child care centers - Rankings 2023"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+### Description
+
+Number of child care centers per 1,000 population under 5 years old.
+
+### What is the numerator 
+
+The numerator is the total number of child care centers in a county. The data include center-based child daycare locations (including those located at school and religious institutes) and does not include group, home, or family-based child care.
+
+### What is the denominator 
+
+The denominator is the total resident population under five years old in a county.
+
+### Raw data access 
+
+Until August 2025, information about childcare centers was made available by Homeland Infrastructure Foundation-Level Data (HIFLD) and accessible here (broken link) <https://hifld-geoplatform.opendata.arcgis.com/datasets/geoplatform::child-care-centers/about>
+
+In August 2025, these data were supposed to be migrated to an Open REST service. However, the promised crosswalk contains many broken links. Here's where the data should be accessible post August 2025 (broken link) <https://services1.arcgis.com/Hp6G80Pky0om7QvQ/arcgis/rest/services/ChildCareCenter1/FeatureServer>
+
+A redditor rescued these data prior to their migration and saved them in a publicly accessible google drive.
+
+Reddit post: <https://www.reddit.com/r/gis/comments/1mzu4np/300_hifld_datasets_archived/>
+
+Google drive: <https://drive.google.com/drive/folders/1NrRRmW0JroWBXnLO6zICwgkoqhuhNTI0>
+
+If you'd like to access the crosswalk (downloaded on Aug 27, 2025) it is available in the raw_data/HIFLD folder of this repo. Also in the HIFLD folder is the data that we downloaded in 2023. It matches the data in the Google Drive folder. This script uses data from the Google Drive.
+
+For the denominators (children under age 5), we use ACS 5-year estimates of table DP05 which we accessed using the tidycensus R package.
+
+Table DP05 is accessible here: <https://data.census.gov/table?q=DP05&g=0100000US$0500000&tid=ACSDP5Y2021.DP05>
+
+Ensure "2021: ACS 5-Year Estimates Data Profiles" is selected from the drop down menu and Geos is set to "All Counties within United States and Puerto Rico."
+
+```{r load data from google drive }
+
+
+library(googledrive)
+
+# Authenticate (interactive OAuth)
+drive_auth()
+
+# List all files in the shared folder using its ID:
+folder_id <- "1w6xOfJ_ptxfDJkChERRs9l9lIeFC-_TY"
+files <- drive_ls(path = as_id(folder_id), recursive = FALSE)
+
+
+# Download all 7 files to a local "data" folder
+dir.create("raw_data/HIFLD/googledrive", showWarnings = FALSE)
+
+purrr::walk2(files$id, files$name, ~ 
+  drive_download(as_id(.x), path = file.path("raw_data/HIFLD/googledrive", .y), overwrite = TRUE)
+)
+
+library(sf)
+library(dplyr)
+library(R.utils)
+
+# List local files
+geo_files <- list.files("raw_data/HIFLD/googledrive", pattern = "\\.geojson\\.gz$", full.names = TRUE)
+
+# Decompress each file
+unzipped <- purrr::map_chr(geo_files, ~ {
+  out <- file.path("raw_data/HIFLD/googledrive/unzipped", sub("\\.gz$", "", basename(.x)))
+  R.utils::gunzip(.x, destname = out, overwrite = TRUE, remove = FALSE)
+  out
+})
+
+# Now read them all
+childcare <- purrr::map_dfr(unzipped, ~ st_read(.x, quiet = TRUE))
+
+```
+
+```{r clean up the childcare data}
+
+childcare$countycode = substr(stringr::str_pad(childcare$COUNTYFIPS, side = "left", width = 5, "0"), 3, 5)
+childcare$statecode = substr(stringr::str_pad(childcare$COUNTYFIPS, side = "left", width = 5, "0"), 1, 2)
+childcare = childcare[!as.numeric(childcare$statecode)>70,] 
+library(dplyr)
+ccc = childcare %>% group_by(statecode, countycode) %>% 
+   summarize(totcenters = n())
+
+
+
+
+
+```
+
+```{r get the population data}
+
+library(tidycensus)
+
+census_api_key("YOURKEYHERE")
+
+acs = get_acs(geography = "county", 
+            variables = "DP05_0005E",
+            year = 2021)
+
+
+acs$statecode = substr(acs$GEOID,1,2)
+acs$countycode = substr(acs$GEOID,3,5)
+acs = acs[!as.numeric(acs$statecode)>70,] 
+acs = acs[,c("statecode", "countycode", "estimate")]
+
+
+```
+
+```{r do the calculation}
+
+acs_cc = merge(ccc, acs, by = c("statecode", "countycode"), all.y = TRUE)
+acs_cc$rawvalue = acs_cc$totcenters/(acs_cc$estimate/1000)
+
+#Check for new AK fipscodes (02063, 02066) and manually calculate measure for 02261.
+newcountynum = sum(acs_cc$totcenters[acs_cc$statecode == "02" & acs_cc$countycode == "063"], acs_cc$totcenters[acs_cc$statecode == "02" & acs_cc$countycode == "066"], na.rm = TRUE)
+newcountydenom = sum(acs_cc$estimate[acs_cc$statecode == "02" & acs_cc$countycode == "063"], acs_cc$estimate[acs_cc$statecode == "02" & acs_cc$countycode == "066"], na.rm = TRUE)
+
+newcounty = data.frame(statecode = "02", countycode = "261", rawvalue = newcountynum / (newcountydenom/1000)) 
+acs_cc[acs_cc$statecode == "02" & acs_cc$countycode == "066" | acs_cc$statecode == "02" & acs_cc$countycode == "063",] = NA
+
+acs_cc_corrected = plyr::rbind.fill(acs_cc, newcounty)
+
+acs_cc_state = acs_cc_corrected %>% group_by(statecode) %>% 
+  summarize(rawvalue = median(rawvalue, na.rm = TRUE))
+acs_cc_state$countycode = "000"
+
+acs_cc_ntl = acs_cc_corrected %>% summarize(rawvalue = median(rawvalue, na.rm = TRUE))
+acs_cc_ntl$countycode = "000"
+acs_cc_ntl$statecode = "00"
+
+acs_cc_total = plyr::rbind.fill(acs_cc_corrected, acs_cc_state, acs_cc_ntl)
+
+
+
+
+
+```
+
+The final dataset will need to be aligned with standard FIPS codes and to include all counties and states. Note that the fipscodes used below are for the 2025 and 2026 releases, even though the data used for this calculation has not been updated since the 2023 release. Since there is no updated data available, these calculations were carried forward for all releases following 2023. 
+
+```{r load the standardized fipscodes }
+library(haven)
+library(here)
+fips <-  bind_rows(
+  read_sas(here("inputs/county_fips_with_ct_old.sas7bdat")) ,
+  read_sas(here("inputs/state_fips.sas7bdat")))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+```{r merge with standard fips }
+v172 = merge(acs_cc_total, fips, by = c("statecode", "countycode"), all.y = TRUE)%>%
+  dplyr::rename(
+    v172_denominator = estimate,
+    v172_numerator   = totcenters,
+    v172_rawvalue    = rawvalue
+  ) %>%
+  dplyr::select(-geometry)
+
+```
+
+
+# Save the measure_data
+
+```{r}
+
+write.csv(v172, file = here("measure_datasets/v172_R2025.csv"))
+```
+

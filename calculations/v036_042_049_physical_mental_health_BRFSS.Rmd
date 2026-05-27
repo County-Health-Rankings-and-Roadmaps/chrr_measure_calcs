@@ -1,0 +1,388 @@
+---
+title: "BRFSS v036, v042, v049 - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+**Note**: Raw data were requested from the BRFSS team and received as an Excel file. As such, the data are not available in the Github repo.
+
+## v036 Poor Physical Health Days
+
+### Basic information
+
+- Description
+Average number of physically unhealthy days reported in past 30 days (age-adjusted).
+
+- What is the numerator?
+The numerator is the average number of days reported by respondents to the question "Now thinking about your physical health, which includes physical illness and injury, for how many days during the past 30 days was your physical health not good?"
+
+- What is the denominator?
+The denominator is the total number of adult respondents in a county.
+
+### Raw data
+
+Requested from the BRFSS team.
+
+**Directions**
+
+Data file: "Copy of Estimates4CHRR_2022_Final.xlsx"
+
+County data: 
+
+- Sheet = "COUNTY_ESTIMATES"
+- Variables: "pday", "pctlpday2_5 ", and "pctlpday97_5"
+
+State data:
+
+- Sheet = "State_estimates"
+- Variables: "pday", "pday_LCL", "pday_UCL"
+
+## v042
+
+### Basic information
+
+- Description
+Average number of mentally unhealthy days reported in past 30 days (age-adjusted).
+
+- What is the numerator?
+The numerator is the number of days respondents reported to the question "Now thinking about your mental health, which includes stress, depression, and problems with emotions, for how many days during the past 30 days was your mental health not good?"
+
+- What is the denominator?
+The denominator is the total number of adult respondents in a county.
+
+### Raw data
+
+Requested from the BRFSS team.
+
+**Directions**
+
+Data file: "Copy of Estimates4CHRR_2022_Final.xlsx"
+
+County data: 
+
+- Sheet = "COUNTY_ESTIMATES"
+- Variables: "mday", "pctlmday2_5 ", and "pctlmday97_5"
+
+State data:
+
+- Sheet = "State_estimates"
+- Variables: "mday", "mday_LCL", "mday_UCL"
+
+## v049 Excessive Drinking
+
+### Basic information
+
+- Description
+Percentage of adults reporting binge or heavy drinking (age-adjusted).
+
+- What is the numerator?
+The numerator is the number of adult respondents reporting either binge drinking or heavy drinking. Binge drinking is defined as a woman consuming more than four alcoholic drinks during a single occasion or a man consuming more than five alcoholic drinks during a single occasion. Heavy drinking is defined as a woman drinking more than one drink on average per day or a man drinking more than two drinks on average per day.
+
+- What is the denominator?
+The denominator is the total number of adult respondents in a county.
+
+### Raw data
+
+Requested from the BRFSS team.
+
+**Directions**
+
+Data file: "Copy of Estimates4CHRR_2022_Final.xlsx"
+
+County data: 
+
+- Sheet = "COUNTY_ESTIMATES"
+- Variables: "excessd", "pctlexcessd2_5 ", and "pctlexcessd97_5"
+
+State data:
+
+- Sheet = "State_estimates"
+- Variables: "excessd", "excessd_LCL", "excessd_UCL"
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+library(readxl)
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+df_county_fips <- fips %>% 
+  filter(countycode != "000") %>%  
+  select(1,2,5) %>% 
+  glimpse()
+
+df_state_fips <- fips %>% 
+  filter(countycode == "000") %>% 
+  select(statecode, countycode, state_abbr = state) %>% 
+  glimpse()
+```
+
+# raw data
+
+Data requested from the Behavioral Risk Factor Surveillance System.
+
+Data received as an Excel file: `Copy of Estimates4CHRR_2022_Final.xlsx`
+
+Data not available in Github repo
+
+## BRFSS - county data
+
+```{r}
+# set up directory for raw data
+data_dir_2025 <- 'C:/01_CHRR/data/r2025/raw/brfss'
+
+brfss_request_ct <-  
+  read_excel(file.path(data_dir_2025, 
+                     "Copy of Estimates4CHRR_2022_Final.xlsx"),
+             sheet = "COUNTY_ESTIMATES") %>% 
+  janitor::clean_names() %>% 
+  glimpse()
+```
+
+## BRFSS - state data 
+
+```{r}
+brfss_request_st <-  
+  read_excel(file.path(data_dir_2025, 
+                     "Copy of Estimates4CHRR_2022_Final.xlsx"), 
+             sheet = "State_estimates") %>% 
+  janitor::clean_names()  %>%  
+  rename(state_name = state) %>% 
+  mutate(state_fips = if_else(is.na(state_fips), "00", str_pad(state_fips, 2, "left", "0"))) %>%
+  glimpse()
+```
+
+# helpers
+
+## get county data
+
+```{r}
+get_vx_county <- function(df, vnum, var_adj, var_cilow, var_cihigh, df_fips_cnty = df_county_fips){
+  
+  vx_county_raw <- df |> 
+    select(county_fips,
+           {{ var_adj }}, {{ var_cilow }}, {{ var_cihigh }})
+  
+  if(vnum %in% c("v036", "v042")){
+    vx_county_cleaned <- vx_county_raw |> 
+      rename(fipscode = county_fips, vx_rawvalue = {{ var_adj }},
+             vx_cilow = {{var_cilow}}, vx_cihigh = {{var_cihigh}}
+      ) |> 
+      rename(!!(paste0(vnum, "_rawvalue")) := vx_rawvalue,
+             !!(paste0(vnum, "_cilow")) := vx_cilow,
+             !!(paste0(vnum, "_cihigh")) := vx_cihigh)
+  }else{
+    vx_county_cleaned <- vx_county_raw |> 
+      rename(fipscode = county_fips, vx_rawvalue = {{ var_adj }},
+             vx_cilow = {{var_cilow}}, vx_cihigh = {{var_cihigh}}
+      ) |> 
+      mutate(vx_rawvalue = vx_rawvalue / 100,
+             vx_cilow = as.numeric(vx_cilow) / 100,
+             vx_cihigh = as.numeric(vx_cihigh) / 100) |> 
+      rename(!!(paste0(vnum, "_rawvalue")) := vx_rawvalue,
+             !!(paste0(vnum, "_cilow")) := vx_cilow,
+             !!(paste0(vnum, "_cihigh")) := vx_cihigh)
+  }
+  
+  vx_county <- df_fips_cnty |>
+    left_join(vx_county_cleaned,
+              by = "fipscode") |> 
+    select(-c(fipscode))
+  
+  return(vx_county)
+  
+}
+
+```
+
+## get state data
+
+```{r}
+get_vx_state <- function(df, vnum, var_adj, var_cilow, var_cihigh){
+  vx_st_raw <- df |> 
+    select(state_name, state_fips,
+           {{var_adj}}, {{var_cilow}}, {{var_cihigh}}
+    )
+  
+  if(vnum %in% c("v036", "v042")){
+    vx_st <- vx_st_raw |> 
+      rename(statecode = state_fips, vx_rawvalue = {{var_adj}},
+             vx_cilow = {{var_cilow}}, vx_cihigh = {{var_cihigh}}) |> 
+      mutate(countycode = "000") |> 
+      select(-state_name) |> 
+      select(statecode, countycode, vx_rawvalue, vx_cilow, vx_cihigh) |> 
+      rename(!!(paste0(vnum, "_rawvalue")) := vx_rawvalue,
+             !!(paste0(vnum, "_cilow")) := vx_cilow,
+             !!(paste0(vnum, "_cihigh")) := vx_cihigh)
+  }else{
+    vx_st <- vx_st_raw |> 
+      rename(statecode = state_fips, vx_rawvalue = {{var_adj}},
+             vx_cilow = {{var_cilow}}, vx_cihigh = {{var_cihigh}}) |> 
+      mutate_if(is.numeric, function(x) {x/100}) |>
+      mutate(countycode = "000") |> 
+      select(-state_name) |> 
+      select(statecode, countycode, vx_rawvalue, vx_cilow, vx_cihigh) |> 
+      rename(!!(paste0(vnum, "_rawvalue")) := vx_rawvalue,
+             !!(paste0(vnum, "_cilow")) := vx_cilow,
+             !!(paste0(vnum, "_cihigh")) := vx_cihigh)
+  }
+  
+  return(vx_st)
+  
+}
+
+```
+
+## add flag_CT
+
+- This function adds a flag to the data frame for Connecticut counties.
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+```
+
+# v036 Poor Physical Health Days
+
+## process data
+
+```{r}
+v036 <-
+  bind_rows(
+    # county data
+    get_vx_county(
+      df = brfss_request_ct,
+      vnum = "v036",
+      var_adj = pday,
+      var_cilow = pctlpday2_5,
+      var_cihigh = pctlpday97_5
+    ),
+    # state data
+    get_vx_state(
+      df = brfss_request_st,
+      vnum = "v036",
+      var_adj = pday,
+      var_cilow = pday_lcl,
+      var_cihigh = pday_ucl
+    )
+  ) %>%
+  arrange(statecode, countycode) %>%
+  add_flag_CT(vnum = "v036", old="U", new = "A") %>% 
+  glimpse()
+```
+##  save data
+
+```{r}
+write_csv(v036,
+          paste0("../measure_datasets/", "v036", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+
+# v042 Poor Mental Health Days
+
+## process data
+
+```{r}
+v042 <- bind_rows(
+  get_vx_county(
+    df = brfss_request_ct,
+    vnum = "v042",
+    var_adj = mday,
+    var_cilow = pctlmday2_5,
+    var_cihigh = pctlmday97_5
+  ),
+  get_vx_state(
+    df = brfss_request_st,
+    vnum = "v042",
+    var_adj = mday,
+    var_cilow = mday_lcl,
+    var_cihigh = mday_ucl
+  )
+) %>%
+  arrange(statecode, countycode) %>%
+  add_flag_CT(vnum = "v042", old = "U", new = "A") %>%
+  glimpse()
+```
+
+##  save data
+
+```{r}
+write_csv(v042,
+          paste0("../measure_datasets/", "v042", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+
+# v049 Excessive Drinking
+
+## process data
+
+```{r}
+v049 <-
+  bind_rows(
+    get_vx_county(
+      df = brfss_request_ct,
+      vnum = "v049",
+      var_adj = excessd,
+      var_cilow = pctlexcessd2_5,
+      var_cihigh = pctlexcessd97_5
+    ),
+    get_vx_state(
+      df = brfss_request_st,
+      vnum = "v049",
+      var_adj = excessd,
+      var_cilow = excessd_lcl,
+      var_cihigh = excessd_ucl
+    )
+  ) %>%
+  arrange(statecode, countycode) %>%
+  add_flag_CT(vnum = "v049", old = "U", new = "A") %>%
+  glimpse()
+```
+
+##  save data
+
+```{r}
+write_csv(v049,
+          paste0("../measure_datasets/", "v049", "_r2025",
+                 ".csv"),
+          na = "")
+```
+

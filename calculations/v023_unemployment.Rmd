@@ -1,0 +1,177 @@
+---
+title: "v023 Unemployment - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+- Description
+Percentage of population ages 16 and older unemployed but seeking work.
+
+- What is the numerator?
+The total number of people in the civilian labor force, age 16 and older, that are unemployed but seeking work.
+
+- What is the denominator?
+The total number of people in the civilian labor force, age 16 and older.
+
+## Raw data access
+
+- Website to downloaded data
+
+http://www.bls.gov/lau/tables.htm
+
+- Online documentation
+
+https://www.bls.gov/lau/publications.htm
+
+**Note on the BLS website (visited on 2025-04-08)**: 
+
+>Please note that annual average metropolitan area, county, and city files have been temporarily removed. These files, including 2024 annual averages, will be re-published on April 18, 2025, reflecting updated metropolitan area delineations from OMB Bulletin No. 23-01, new county equivalents in Connecticut, and revised estimation inputs.
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(haven)
+```
+
+# set up directory
+
+```{r}
+# set up directory that holds data needed for calculations
+data_dir_2025 <- 'C:/01_CHRR/data/r2025'
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas(file.path(data_dir_2025, "county_fips_with_ct_old.sas7bdat") ),
+  read_sas(file.path(data_dir_2025, "state_fips.sas7bdat")))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# import raw data
+
+```{r}
+bls_v023 <- read_excel(
+  file.path(data_dir_2025, "raw/BLS", "laucnty23.xlsx"),
+  skip = 4) %>%  
+  janitor::clean_names() %>% 
+  select(-c(code_1, x6)) %>% 
+  drop_na() %>% 
+  select(statecode = code_2, countycode = code_3, numerator = unemployed, denominator = force)
+
+bls_v023
+```
+
+# county data
+
+```{r}
+bls_v023_ct <- bls_v023 %>% 
+  filter(statecode != "72")
+
+bls_v023_ct
+```
+
+## check CT counties: old FIPS codes
+
+```{r}
+bls_v023_ct %>% 
+  filter(statecode == "09")
+```
+
+# state data
+
+```{r}
+bls_v023_st <- bls_v023_ct %>% 
+  mutate(countycode = "000") %>% 
+  group_by(statecode, countycode) %>% 
+  summarise(numerator = sum(numerator, na.rm = TRUE), 
+            denominator = sum(denominator, na.rm = TRUE),
+            .groups = "drop")
+
+bls_v023_st
+```
+
+# us data
+
+```{r}
+bls_v023_us <- bls_v023_ct %>% 
+  summarise(statecode = "00", countycode = "000",
+            numerator = sum(numerator, na.rm = TRUE), 
+            denominator = sum(denominator, na.rm = TRUE))
+
+bls_v023_us
+```
+
+# combine county, state, and us data
+
+```{r}
+bls_v023_final <- bind_rows(bls_v023_ct, bls_v023_st, bls_v023_us) %>% 
+  arrange(statecode, countycode) %>% 
+  rename(v023_numerator = numerator, v023_denominator = denominator) %>% 
+  mutate(v023_rawvalue = v023_numerator/v023_denominator,
+         v023_cilow = NA_real_, v023_cihigh = NA_real_, v023_sourceflag = NA_real_)
+
+bls_v023_final
+```
+
+# standardize fips
+
+-   `15005`: missing in `bls_v023_final`
+
+-   CT: 8 legacy counties
+
+```{r}
+# standardize fips: add 15005, use CT new counties
+bls_v023_final_1 <- fips %>% 
+  select(statecode, countycode) %>% 
+  left_join(bls_v023_final, by = c("statecode", "countycode"))
+
+bls_v023_final_1
+```
+
+```{r}
+summary(bls_v023_final_1)
+```
+
+# add flag_CT
+
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+bls_v023_final_2 <- bls_v023_final_1 %>% 
+  mutate(v023_flag_CT = case_when(
+    statecode == "09" & countycode %in% CT_old_lst ~ "A",
+    statecode == "09" & countycode %in% CT_new_lst ~ "U",
+    TRUE ~ NA
+  ))
+
+bls_v023_final_2
+```
+
+# save data
+
+```{r}
+write_csv(bls_v023_final_2, 
+          paste0("../measure_datasets/", "v023", "_r2025",
+                 ".csv") )
+```
+

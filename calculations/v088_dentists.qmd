@@ -1,0 +1,269 @@
+---
+title: "v088-Dentists: R script"
+format: html
+editor: visual
+author: KG
+---
+
+## Measure details
+
+-   Description: Ratio of population to dentists.
+
+-   Data Source: Area Health Resource File/National Provider Identifier Downloadable File
+
+-   Data Download Link: <https://data.hrsa.gov/data/download>
+
+-   Numerator: The number of dentists with a National Provider Identifier in 2023.
+
+-   Denominator: The denominator is the total 2023 resident population of a county obtained from the 2023 Vintage Census population estimates. 
+
+## Notes
+
+This measure was not updated for the CHR&R 2025 Annual Release, but was updated in the post 2025 release rolling CHR&R updates in the Fall of 2025. This code uses the 2024-2025 release of Area Health Resources File data, which includes provider data through 2023. The output dataset is saved as **v088_r2026** in measure_datasets to reflect that it was not calculated for the 2025 annual release.
+
+NOTE that this measure was not updated for Connecticut with the 2024-2025 release of the Area Health Resources File. The AHRF contains data for the eight former CT counties but there is no recent population data available to use as a denominator for those counties for this measure. Additionally, CHR&R decided not to update CT data for any measures in the rolling 2025 data updates that took place after the 2025 Annual Release due to difficulties created by the geography changes.
+
+```{r message=false warning=false}
+library(tidyverse)
+library(here)
+```
+
+## Calculating the numerator - counties, state and national
+
+```{r}
+ahrf_raw <-read.csv(here("raw_data/AHRF/ahrf2024_Feb2025.csv"))%>%
+  mutate(fipscode = str_pad(fips_st_cnty, 5, pad = "0")) %>% 
+  mutate(statecode = str_pad(fips_st, 2, pad = "0")) %>% 
+  mutate(countycode = str_pad(fips_cnty, 3, pad = "0")) %>% 
+  select(
+    fipscode, 
+    st_name, cnty_name, 
+    statecode, 
+    countycode, 
+    v088_numerator=dent_npi_23) %>% 
+#remove Puerto Rico and USVI and guam. Leave in CT for now for national value.
+  filter(!statecode %in% c("66","72","78")) #this leaves 3,158
+
+
+```
+
+Bring in official list of chrr counties with old CT fips to make sure there aren't other discrepancies
+
+```{r}
+library(haven) 
+chrr_fips <- read_sas(here("inputs/county_fips_with_ct_old.sas7bdat"))
+
+county_check <- full_join(ahrf_raw, chrr_fips, by ="fipscode")
+```
+
+Counties below in AK and VA have missing values in the dentists dataset AND aren't listed in our master list of counties. These are counties that no longer exist due to name changes or being combined with other counties. See the NOTE at the bottom of the AHRF 2023-2024 Technical DocumentationCSV_Feb2025 and this webpage from the Census for more details: <https://www.census.gov/programs-surveys/geography/technical-documentation/county-changes.2010.html#list-tab-957819518>
+
+Delete the old/incorrect counties (but retain CT counties with missing data).
+
+```{r}
+ahrf_correct_counties <- county_check %>% 
+  filter(!fipscode %in% c("02201", "02232", "02261", "02280", "51515", "51560"))
+```
+
+Check log to see number of counties remaining - 3,152, this is the correct number when old and new CT counties are retained
+
+### -Calculate state values by summing county values
+
+```{r}
+state_values <- ahrf_correct_counties %>% 
+  group_by(statecode.x) %>%
+  summarise(
+    v088_numerator = sum(v088_numerator, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+#set CT to missing because the state value is not updated for 2026  
+  mutate(
+    v088_numerator = if_else(statecode.x=="09", NA_real_, v088_numerator)
+  )
+```
+
+### -Calculate national value by summing county values
+
+```{r}
+ahrf_correct_counties %>% 
+summarise(total = sum(v088_numerator, na.rm = TRUE))
+
+
+state_and_nat <- state_values %>% 
+  rename(statecode = statecode.x) %>% 
+  mutate(countycode = "000") %>% 
+  mutate(fipscode = paste0(statecode, countycode)) %>% 
+add_row(
+    statecode = "00",
+    fipscode = "00000",
+    countycode = "000",
+    v088_numerator = 249826
+  )
+```
+
+### -Clean up, merge, and create final numerator dataset
+
+```{r}
+county_clean <-ahrf_correct_counties %>% 
+  select(
+    fipscode,
+    statecode = statecode.x,
+    countycode = countycode.x,
+    v088_numerator
+  ) %>% 
+  mutate(
+    v088_numerator = if_else(statecode=="09", NA_real_, v088_numerator)
+  )
+
+```
+
+```{r}
+v088_numerator<- bind_rows(state_and_nat, county_clean)
+```
+
+## Calculating the denominator - counties, state and national
+
+Creating a table with just the county fipscodes and the 2023 county pop estimates
+
+```{r}
+county_pop23 <- read_sas(here("inputs/vintage2023.sas7bdat")) %>% 
+  filter(countycode != "000") %>% 
+  select(fipscode, 
+         statecode, 
+         countycode, 
+         v088_denominator = POPESTIMATE2023
+         )
+#3,144 counties, only new CT counties are included in Vintage 2023 population estimates
+```
+
+Calculate state population from sum of counties
+
+```{r}
+state_pop <- county_pop23 %>% 
+group_by(statecode) %>%
+  summarise(
+    v088_denominator = sum(v088_denominator, na.rm = TRUE),
+  .groups = "drop"
+  ) %>% 
+  mutate(countycode = "000") %>% 
+  mutate(fipscode = paste0(statecode, countycode)) %>% 
+    #set CT to missing because the state value is not updated for 2026  
+  mutate(
+    v088_denominator = if_else(statecode=="09", NA_real_, v088_denominator)
+  )
+```
+
+#calculate national population by summing county values
+
+```{r}
+county_pop23 %>% summarise(total = sum(v088_denominator, na.rm = TRUE)) 
+
+
+state_and_nat_pop <- state_pop %>% 
+  add_row( 
+    statecode = "00", 
+    fipscode = "00000", 
+    countycode = "000", 
+    v088_denominator = 334914895 
+    )
+```
+
+```{r}
+v088_denominator<- bind_rows(state_and_nat_pop, county_pop23) %>% 
+#set CT county values to missing now that you calculated national population
+  mutate(
+  v088_denominator = if_else(statecode=="09", NA_real_, v088_denominator)
+)
+```
+
+## Measure calculation
+
+```{r}
+v088 <- full_join(v088_denominator, v088_numerator, by ="fipscode") %>% 
+  select(
+    fipscode,
+    statecode = statecode.y,
+    countycode = countycode.y,
+    v088_numerator, v088_denominator
+) %>% 
+  mutate(v088_cilow = NA) %>% 
+  mutate(v088_cihigh = NA) %>% 
+  mutate(problem = NA) %>% 
+  mutate(v088_rawvalue = v088_numerator/v088_denominator) %>% 
+  mutate(v088_rawalternatevalue = v088_denominator/v088_numerator) %>% 
+  
+
+#v088_rawalternatevalue is the ratio (this measure is displayed as a ratio on our website).
+  
+#If a county has a population greater than 4,000 and 0 dentists, the county's v088 value is set to missing. Because of errors with division by 0 for the rawalternatevalue, if a county pop is less than 4000 and has 0 dentists, the rawalternatevalue is missing. On the website, the measure value will display as a ratio that looks like denominator:0. 
+  mutate(
+    v088_rawvalue = if_else(
+      v088_numerator == 0 & v088_denominator > 4000,
+      NA_real_,
+      v088_rawvalue
+    )
+  ) %>% 
+  mutate(
+    v088_rawalternatevalue = if_else(
+      v088_numerator ==0,
+      NA_real_,
+      v088_rawalternatevalue)) %>% 
+#create a flag for CT counties
+  mutate(
+    v088_flag_ct = if_else(
+    statecode =="09",
+    "U",
+    NA_character_
+  ))
+
+```
+
+Checking descriptive statistics
+
+```{r}
+v088 %>%
+  summarise(
+    n = sum(!is.na(v088_rawvalue)),
+    mean = mean(v088_rawvalue, na.rm = TRUE),
+    sd = sd(v088_rawvalue, na.rm = TRUE),
+    min = min(v088_rawvalue, na.rm = TRUE),
+    q1 = quantile(v088_rawvalue, 0.25, na.rm = TRUE),
+    median = median(v088_rawvalue, na.rm = TRUE),
+    q3 = quantile(v088_rawvalue, 0.75, na.rm = TRUE),
+    max = max(v088_rawvalue, na.rm = TRUE)
+  )
+
+v088 %>%
+  summarise(
+    n = sum(!is.na(v088_rawvalue)),
+    mean = mean(v088_rawvalue, na.rm = TRUE),
+    sd = sd(v088_rawvalue, na.rm = TRUE),
+    min = min(v088_rawvalue, na.rm = TRUE),
+    q1 = quantile(v088_rawvalue, 0.25, na.rm = TRUE),
+    median = median(v088_rawvalue, na.rm = TRUE),
+    q3 = quantile(v088_rawvalue, 0.75, na.rm = TRUE),
+    max = max(v088_rawvalue, na.rm = TRUE)
+  )
+
+v088 %>%
+  summarise(
+    n = sum(!is.na(v088_rawvalue)),
+    mean = mean(v088_rawvalue, na.rm = TRUE),
+    sd = sd(v088_rawvalue, na.rm = TRUE),
+    min = min(v088_rawvalue, na.rm = TRUE),
+    q1 = quantile(v088_rawvalue, 0.25, na.rm = TRUE),
+    median = median(v088_rawvalue, na.rm = TRUE),
+    q3 = quantile(v088_rawvalue, 0.75, na.rm = TRUE),
+    max = max(v088_rawvalue, na.rm = TRUE)
+  )
+```
+
+Save the final dataset.
+
+```{r}
+write.csv(
+  v088, 
+  here("measure_datasets", "v088_r2026.csv"),
+  row.names = FALSE
+  )
+```

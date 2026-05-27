@@ -1,0 +1,206 @@
+---
+title: "v065 Children Eligible for Free or Reduced Price Lunch - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+- Description
+Percentage of children enrolled in public schools that are eligible for free or reduced price lunch.
+
+- What is the numerator?
+The numerator is the number of public school students, grades PK-12, eligible for free or reduced price lunch. Children eligible for free lunch live in a family with income less than 130% of the federal poverty level or who are directly certified, while children eligible for reduced price lunch live in a family with income less than 185% of the federal poverty level. Students are directly certified to receive free meals if they belong to a household receiving selected federal benefits or are migrant, homeless, in foster care, or in Head Start.
+
+- What is the denominator?
+The denominator is the total number of students enrolled in public schools, grades PK-12.
+
+## Raw data access
+
+Website to downloaded data:  
+http://nces.ed.gov/ccd/elsi/tableGenerator.aspx
+
+
+**Directions:**
+
+- Select a Table Row: "Public School"
+- Select Years: "2022-2023"
+- Select Table Columns: select "Information," "Basic Information," "County Number [Public School]" and select "Enrollments," "Students in Special Programs," check 2022-2023 under "Free and Reduced Lunch Students [Public School]" and select "Total Enrollment," check 2022-2023 under "Total Students, All Grades (Excludes AE) [Public School]"
+- Select Filters (Refinements): Can leave without altering.
+- Click "Create Table"
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# import raw data
+
+NCES data
+
+```{r}
+raw_dir <- "../raw_data/NCES/free_or_reduced_price_lunch_eligible/ELSI_csv_export_6385905502385690888638.zip"
+
+freelunch_school <- 
+  read_csv(raw_dir,
+           skip = 5) %>% 
+  glimpse()
+```
+
+# county data
+
+```{r}
+v065_cnt_1 <- freelunch_school %>% 
+  janitor::clean_names() %>% 
+  select(county_number_public_school_2022_23, 
+         free_and_reduced_lunch_students_public_school_2022_23, 
+         total_students_all_grades_excludes_ae_public_school_2022_23) %>% 
+  rename(fipscode = 1, freereduced_lunch_students = 2, total_students = 3) %>% 
+  drop_na(fipscode) %>% 
+  # clean fipscode
+  mutate(fipscode = str_remove_all(fipscode, "=|\"")) %>% 
+  mutate(statecode = str_sub(fipscode, 1L, 2L),
+         countycode = str_sub(fipscode, 3L, 5L), .before = 1) %>% 
+  mutate_at(c('total_students', 'freereduced_lunch_students'),
+            parse_number) %>%
+  filter(!is.na(freereduced_lunch_students), !is.na(total_students)) %>% 
+  mutate_at(c(4, 5), as.numeric) %>% 
+  group_by(statecode, countycode, fipscode) %>% 
+  summarise(v065_numerator = sum(freereduced_lunch_students),
+            v065_denominator = sum(total_students)) %>% 
+  mutate(v065_rawvalue = v065_numerator/v065_denominator) %>% 
+  glimpse()
+
+```
+
+```{r}
+v065_cnt_2 <- fips %>% 
+  filter(countycode != "000") %>% 
+  select(1:2) %>% 
+  left_join(v065_cnt_1, by = c("statecode", "countycode")) %>% 
+  glimpse()
+```
+
+# state data
+
+```{r}
+v065_st <- v065_cnt_1 %>% 
+  drop_na() %>% 
+  group_by(statecode) %>% 
+  summarise(countycode = "000", 
+            v065_numerator = sum(v065_numerator, na.rm = TRUE),
+            v065_denominator = sum(v065_denominator, na.rm = TRUE)) %>% 
+  mutate(v065_rawvalue = v065_numerator/v065_denominator)
+
+v065_st
+```
+
+## states missing data
+
+2025: 5 states + DC
+Delaware (10), District of Columbia (11), Massachusetts (25), Montana (30), Tennessee (47), West Virginia (54)
+
+```{r}
+fips %>% 
+  filter(statecode != "00", countycode == "000") %>% 
+  anti_join(v065_st %>% 
+              distinct(statecode),
+            by = "statecode"
+  )  %>%  
+  select(county, statecode)  %>%  
+  mutate(temp = paste0(county, " (", statecode, ")"))  %>%  
+  select(temp) %>% 
+  pull()
+
+
+```
+
+
+# US data
+
+```{r}
+v065_us <- v065_st %>% 
+  summarise(statecode = "00", countycode = "000", 
+            v065_numerator = sum(v065_numerator),
+            v065_denominator = sum(v065_denominator)) %>% 
+  mutate(v065_rawvalue = v065_numerator/v065_denominator)
+
+v065_us
+```
+
+# combine county, state, us data
+
+```{r}
+v065 <- fips %>% 
+  select(statecode, countycode) %>%  
+  left_join(
+    bind_rows(v065_cnt_2, v065_st, v065_us),
+    by = c('statecode', 'countycode')
+  ) %>% 
+  select(-fipscode) %>% 
+  mutate(v065_rawvalue = if_else(v065_rawvalue>1, 1, v065_rawvalue)) |> 
+  mutate(v065_cilow = NA_real_,
+         v065_cihigh = NA_real_,
+         v065_sourceflag = NA_real_)
+
+v065
+```
+
+# add flag_CT
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+v065_2 <- v065 %>% 
+  add_flag_CT(vnum = "v065", old="U", new = "A")
+
+v065_2
+```
+
+# save data
+
+```{r}
+write_csv(v065_2, 
+          paste0("../measure_datasets/", "v065", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+
+# --------

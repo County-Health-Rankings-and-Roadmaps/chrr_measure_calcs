@@ -1,0 +1,240 @@
+---
+title: "v138 Drug overdose deaths (subgroups) - Ranking 2026"
+author: "GL (updated in 2026 by how)"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+- Description
+Number of drug poisoning deaths per 100,000 population.
+
+- What is the numerator?
+The numerator includes deaths from accidental, intentional, and undetermined drug poisoning by and exposure to: 1) nonopioid analgesics, antipyretics and antirheumatics, 2) antiepileptic, sedative-hypnotic, antiparkinsonism and psychotropic drugs, not elsewhere classified, 3) narcotics and psychodysleptics (hallucinogens), not elsewhere classified, 4) other drugs acting on the autonomic nervous system, and 5) other and unspecified drugs, medicaments and biological substances, over a 3-year period. ICD-10 codes used include X40-X44, X60-X64, X85, and Y10-Y14.
+
+- What is the denominator?
+The denominator is the aggregate annual population over the three-year period.
+
+## Raw data access
+
+- NCHS mortality and natality data 2021-2023: the data is requested
+
+- We don't have new CT planning regions for 2023, so these values are set to missing. 
+
+- Census population estimates 2021-2023 from: https://www2.census.gov/programs-surveys/popest/datasets
+
+## Subgroups
+
+- non-Hispanic, White only, 
+- non-Hispanic, Black only, 
+- non-Hispanic, AIAN only, 
+- non-Hispanic, Asian only, 
+- non-Hispanic, NHOPI only, 
+- non-Hispanic, Two or More Races
+- Hispanic
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+```
+
+# set up directory
+
+```{r}
+# set up directory that holds data needed for calculations
+# NCHS mortality data, not allowed to share in GitHub
+nchs_mort_dir <- "D:/CHRR/mortality raw"
+
+# NCHS natality data, not allowed to share in GitHub
+nchs_nata_dir <- "D:/CHRR/natality raw"
+
+# Census county population estimates data
+census_pop_dir <- "D:/CHRR/pop raw"
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat"),
+  read_sas( "../inputs/state_fips.sas7bdat")) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# helpers
+
+## functions used commonly by NCHS measures
+
+- some commonly used functions are in a separate file, `nchs_measure_helpers.R`. 
+```{r}
+source("../scripts/nchs_measure_helpers.R")
+```
+
+
+## function to process pop data for v015
+
+```{r}
+process_pop_other <- function(year){
+  
+  pop <- read_census_pop(file_name = get_census_csv_file_info(year)$file_name ) %>% 
+    get_census_tot_pop(year_num = get_census_csv_file_info(year)$year_num, by_race = TRUE)
+  
+  return(pop)
+}
+```
+
+## function to process mortality data for v015
+
+```{r}
+process_mort_other <- function(year, icd){
+  
+  print(get_mort_file_name(year))
+  
+  mort <- read_mort_data(
+    file_path = file.path(nchs_mort_dir, get_mort_file_name(year) ), 
+    header = mort_header,
+    n_max = Inf) %>% 
+    glimpse() %>% 
+    get_mort_filtered_by_icd(df_fips=fips, icd, by_race = TRUE)
+  
+  return(mort)
+}
+```
+
+# pop 2021-2023 
+
+```{r}
+pop_all <- bind_rows(
+  process_pop_other(2021),
+  process_pop_other(2022) %>% fix_CT_pop(process_pop_other(2021)),
+  process_pop_other(2023) %>% fix_CT_pop(process_pop_other(2021))
+  ) %>% 
+  group_by(statecode, countycode, race) %>% 
+  summarise(pop = sum(pop), .groups = "drop") %>% 
+  filter(!(statecode == "02" & countycode == "261") ) %>% # remove 02261
+  glimpse()
+```
+
+# NCHS mort data 
+
+## header
+
+```{r}
+mort_header <- tribble(
+  ~fld_name, ~start,  ~end,
+  "state_of_residence", 29,  30,
+  "county_of_residence", 35,  37,
+  "icd_code", 146, 149,
+  "race", 445, 446,
+  "race_recode_5", 450, 450,
+  "hispanic_origin", 484, 486,
+  "hispanic_origin_race_recode", 488, 488,
+  "race_recode_40", 489, 490
+)
+```
+
+## icd codes for v138
+
+```{r}
+icd_code_lst <- c('X40', 'X41', 'X42', 'X43', 'X44', 'X60', 'X61', 'X62', 'X63', 'X64', 'X85', 
+				'Y10', 'Y11', 'Y12', 'Y13', 'Y14')
+
+```
+
+## mort 3 years
+```{r}
+mort_all <- bind_rows(
+  c(2021:2023) %>% 
+    map(~process_mort_other(year = ., icd_code_lst))
+  ) %>%  
+  group_by(statecode, countycode, race) %>%  
+  summarise(deaths = sum(deaths), .groups = "drop") %>%  
+  filter(!is.na(race)) 
+
+```
+
+
+
+# mortality calculation
+
+## merge mort and pop data
+
+```{r}
+merged <- pop_all %>% 
+  left_join(mort_all, 
+            by = c("statecode", "countycode", "race")) 
+  
+```
+
+## confidence Intervals
+
+```{r}
+v138 <- merged %>% 
+  rename(numerator = deaths, denominator = pop) %>% 
+  mutate(
+    rawvalue = numerator / denominator *100000,
+    rse = 100 * sqrt(1/numerator),
+  ) %>% 
+  mutate(
+    std = rawvalue * rse / 100,
+    cilow = rawvalue - 1.96 * std,
+    cihigh = rawvalue + 1.96 * std
+  ) %>% 
+  select(-c(rse, std))
+
+```
+
+## calculate CI L and U for n < 100
+
+```{r}
+suppress_limit <- 10
+
+v138_2 <- v138 %>% 
+  left_join(get_pois_CI(), by = c("numerator" = "n")) %>% 
+  mutate(cilow = if_else(numerator>=suppress_limit & numerator <=99,
+                         rawvalue * L, cilow),
+         cihigh = if_else(numerator>=suppress_limit & numerator <=99,
+                         rawvalue * U, cihigh)) %>% 
+  select(-c(L, U)) %>% 
+  mutate(across(c(denominator:cihigh), ~ if_else(numerator < suppress_limit, 
+                                            NA_real_, .x)))
+```
+
+## get subgroups
+
+```{r}
+v138_other <- process_race_data_wide(v138_2, fips, "v138") %>% 
+  select(-c(ends_with('denominator'), ends_with('numerator')))
+
+```
+
+## add flag_CT
+
+```{r}
+v138_other_2 <- v138_other %>%
+  add_flag_CT(vnum="v138_race", old = "U", new = "A")
+
+```
+
+# compare initial and duplicated calculations
+
+```{r}
+compare_subgroup("v138", v138_other_2, 2026)
+```
+
+# save data
+```{r}
+save_data(v138_other_2, "v138_otherdata")
+```

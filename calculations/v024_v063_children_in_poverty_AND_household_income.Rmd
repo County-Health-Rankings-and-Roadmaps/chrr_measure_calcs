@@ -1,0 +1,268 @@
+---
+title: "v024 v063 - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# About
+
+## v024 - Children in poverty
+
+### Basic information
+
+- Description
+Percentage of people under age 18 in poverty.
+
+- What is the numerator?
+Number of people under age 18 living in a household whose income is below the poverty level
+
+- What is the denominator?
+Number of people under age 18
+
+### Raw data access
+
+**#Website to downloaded data**
+https://www.census.gov/data/datasets/2023/demo/saipe/2023-state-and-county.html
+
+**Online documentation** 
+https://www.census.gov/programs-surveys/saipe/technical-documentation/methodology/counties-states/county-level.html
+
+**Directions**
+
+Create 95% confidence intervals from the given 90% confidence intervals.
+
+95% Confidence Interval: see this document for formula: https://www2.census.gov/programs-surveys/acs/tech_docs/statistical_testing/2023_Instructions_for_Stat_Testing_ACS.pdf
+
+cidistance_pov = 1.96/1.645*(POV_90UCL-POV_U18PCT);
+
+v024_cilow =  v024_rawvalue - cidistance_pov;
+
+v024_cihigh =  v024_rawvalue + cidistance_pov
+
+## v063 - Median Household Income
+
+### Basic information
+
+- Description
+The income where half of households in a county earn more and half of households earn less.
+
+### Raw data access
+
+**#Website to downloaded data**
+https://www.census.gov/data/datasets/2023/demo/saipe/2023-state-and-county.html
+
+**Online documentation** 
+https://www.census.gov/programs-surveys/saipe/technical-documentation/methodology/counties-states/county-level.html
+
+**Directions**
+
+Convert the given 90% to 95% Confidence Intervals:
+
+cidistance_medinc = 1.96/1.645*(MEDINC_90UCL-MEDIANHHINCOME);
+
+v063_cilow =  v063_rawvalue - cidistance_medinc;
+
+v063_cihigh =  v063_rawvalue + cidistance_medinc;
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+library(readxl)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat"),
+  read_sas( "../inputs/state_fips.sas7bdat")) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# helpers
+
+## standardize column names
+
+```{r}
+standardize_col_names <- function(df, col_prefix){
+  res <- df %>% 
+    rename(
+           !!(paste0(col_prefix, "_rawvalue")) := rawvalue, 
+           !!(paste0(col_prefix, "_numerator")) := numerator,
+           !!(paste0(col_prefix, "_denominator")) := denominator,
+           !!(paste0(col_prefix, "_cilow")) := cilow,
+           !!(paste0(col_prefix, "_cihigh")) := cihigh,
+           !!(paste0(col_prefix, "_sourceflag")) := sourceflag
+           )
+  return(res)
+}
+```
+
+## add flag_CT
+
+- This function adds a flag to the data frame for Connecticut counties.
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+```
+
+## standardize fips
+
+```{r}
+standardize_fips <- function(df){
+  res <- fips %>% 
+    select(statecode, countycode) %>% 
+    left_join(df, by = c("statecode", "countycode"))
+  
+  return(res)
+}
+
+```
+
+## save data
+
+```{r}
+save_data <- function(df, vnum, output_dir = "../measure_datasets/") {
+  df %>%
+    write_csv(paste0(output_dir, vnum, "_r2025.csv"), na = "")
+}
+```
+
+# raw data
+https://www2.census.gov/programs-surveys/saipe/datasets/2022/2022-state-and-county/est22all.xls
+
+```{r}
+saipe2023 <- readxl::read_excel("../raw_data/SAIPE/est23all.xls" ,
+                                skip = 3)  %>%  
+  janitor::clean_names() %>% 
+  glimpse()
+```
+
+# process data
+```{r}
+saipe1 <- saipe2023 %>%
+  select(
+    statecode = state_fips_code,
+    countycode = county_fips_code,
+    v024_numerator = poverty_estimate_age_0_17,
+    v024_rawvalue = poverty_percent_age_0_17,
+    v063_rawvalue = median_household_income,
+    cpov_upper = x90_percent_ci_upper_bound_16,
+    cpov_lower = x90_percent_ci_lower_bound_15,
+    x90_percent_ci_upper_bound_25
+  ) %>%
+  mutate(across(
+    3:8,
+    ~ as.numeric(.x)
+  )) %>%
+  mutate(
+    v024_rawvalue = v024_rawvalue / 100,
+    cpov_upper = cpov_upper / 100,
+    cpov_lower = cpov_lower / 100
+  ) %>%
+  mutate(
+    cidistance_cpov = 1.96 / 1.645 * (v024_rawvalue - cpov_lower),
+    cidistance_medinc = 1.96 / 1.645 * (x90_percent_ci_upper_bound_25 - v063_rawvalue)
+  ) %>%
+  mutate(
+    v024_cilow = v024_rawvalue - cidistance_cpov,
+    v024_cihigh = v024_rawvalue + cidistance_cpov,
+    v063_cilow = v063_rawvalue - cidistance_medinc,
+    v063_cihigh = v063_rawvalue + cidistance_medinc,
+    v024_denominator = NA_real_,
+    v024_sourceflag = NA_real_,
+    v063_numerator = NA_real_,
+    v063_denominator = NA_real_,
+    v063_sourceflag = NA_real_
+  )
+
+saipe1
+```
+
+
+# v024
+
+```{r}
+v024 <- saipe1 %>% 
+  select(1:2, starts_with("v024"))
+
+v024
+```
+
+## suppression: cihigh <= 1
+
+```{r}
+v024_2 <- v024 %>% 
+  mutate(v024_cihigh = if_else(
+    v024_cihigh > 1, 1, v024_cihigh
+  ))
+
+```
+
+## add old CT counties and add flag_CT
+
+```{r}
+v024_3 <- v024_2 %>% 
+  standardize_fips() %>% 
+  add_flag_CT(vnum = "v024", old="U", new = "A")
+
+v024_3
+```
+
+# v063
+
+```{r}
+v063 <- saipe1 %>% 
+  select(1:2, starts_with("v063"))
+
+v063
+```
+
+## add old CT counties and add flag_CT
+
+```{r}
+v063_3 <- v063 %>% 
+  standardize_fips() %>% 
+  add_flag_CT(vnum = "v063", old="U", new = "A")
+
+v063_3
+```
+
+# save data: v024, v063
+
+```{r}
+v024_3 %>% 
+  save_data("v024")
+
+v063_3 %>% 
+  save_data("v063")
+```
+

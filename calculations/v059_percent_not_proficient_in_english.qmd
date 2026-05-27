@@ -1,0 +1,257 @@
+---
+title: "v059 Percent not proficient in English - R2025 "
+author: "how"
+format: html
+editor: visual
+---
+
+# Description:
+
+Percentage of population aged 5 and over who reported speaking English less than well.
+
+## Data Source:
+
+American Community Survey, five-year estimates
+
+## Data Download Link:
+
+https://data.census.gov/cedsci/table?q=B16005&tid=ACSDT5Y2023.B16005
+
+Please refer to https://data.census.gov/cedsci/ and use any statistical package to retrieve table or data (http://www.census.gov/programs-surveys/acs/data/summary-file.html). Select table B16005 of the 2019-2023 ACS 5-year estimates.
+
+# Numerator:
+
+The numerator is the number of people aged 5 and over who self-reported they are not proficient in speaking English (speak English either “not well” or “not at all”).
+
+# Denominator:
+
+The denominator is the total county population aged 5 and over.
+
+# How do we calculate this measure?
+
+### Total household population (n) =
+
+Total, as reported
+
+### People that are not proficient in English =
+
+Native and foreign born people that speak English "not well" or "not at all."
+
+### Percent of population not proficient in English =
+
+(People not proficient in English/Total population)\*100
+
+#### numerator =
+
+Estimate; Native: - Speak Spanish: - Speak English "not well" +
+
+Estimate; Native: - Speak Spanish: - Speak English "not at all" +
+
+Estimate; Native: - Speak other Indo-European languages: - Speak English "not well" +
+
+Estimate; Native: - Speak other Indo-European languages: - Speak English "not at all" +
+
+Estimate; Native: - Speak Asian and Pacific Island languages: - Speak English "not well" +
+
+Estimate; Native: - Speak Asian and Pacific Island languages: - Speak English "not at all" +
+
+Estimate; Native: - Speak other languages: - Speak English "not well" +
+
+Estimate; Native: - Speak other languages: - Speak English "not at all" +
+
+Estimate; Foreign born: - Speak Spanish: - Speak English "not well" +
+
+Estimate; Foreign born: - Speak Spanish: - Speak English "not at all" +
+
+Estimate; Foreign born: - Speak other Indo-European languages: - Speak English "not well" +
+
+Estimate; Foreign born: - Speak other Indo-European languages: - Speak English "not at all" +
+
+Estimate; Foreign born: - Speak Asian and Pacific Island languages: - Speak English "not well" +
+
+Estimate; Foreign born: - Speak Asian and Pacific Island languages: - Speak English "not at all" +
+
+Estimate; Foreign born: - Speak other languages: - Speak English "not well" +
+
+Estimate; Foreign born: - Speak other languages: - Speak English "not at all"
+
+#### denominator =
+
+Estimate; Total
+
+#### 95% Confidence Interval:
+
+see this document for formula: https://www2.census.gov/programs-surveys/acs/tech_docs/statistical_testing/2021_Instructions_for_Stat_Testing_ACS.pdf
+
+For counties where MOE for v059_denominator is missing, set CIs to missing.
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(haven)
+library(stringr)
+library(here)
+```
+
+# standard county and state fips
+
+The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+
+```{r}
+fips <-  bind_rows(
+  read_sas(here("inputs/county_fips_with_ct_old.sas7bdat")) ,
+  read_sas(here("inputs/state_fips.sas7bdat")))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+### Note: the code below utilizes the Census API.
+
+To run this code, you must first get your own Census API key by registering here: <https://api.census.gov/data/key_signup.html>
+
+This page has helpful examples for how the Census API works: <https://www.census.gov/data/developers/guidance/api-user-guide.Example_API_Queries.html#list-tab-559651575>
+
+#### Save your key here
+
+Paste the long string of numbers and letters emailed to you by The Census Bureau API Team after the "&key=" below
+
+```{r}
+key = "&key="
+
+```
+
+# write census api pull
+
+```{r}
+
+measurenum = "v059" #for naming cols later 
+
+acscolumns = c("B16005_001E", "B16005_001M", 
+               "B16005_007E", "B16005_007M", "B16005_012E", "B16005_012M",
+               "B16005_008E", "B16005_008M", "B16005_013E", "B16005_013M",
+               "B16005_017E", "B16005_017M", "B16005_022E", "B16005_022M",
+               "B16005_018E", "B16005_018M", "B16005_023E", "B16005_023M",
+               "B16005_029E", "B16005_029M", "B16005_030E", "B16005_030M",
+               "B16005_034E", "B16005_034M", "B16005_035E", "B16005_035M", 
+               "B16005_039E", "B16005_039M", "B16005_040E", "B16005_040M", 
+               "B16005_044E", "B16005_044M", "B16005_045E", "B16005_045M")
+apitype = "detailed" #other options include subject, profile, and comparison 
+denom = "B16005_001E"
+year = 2025 
+calctype = "percent" #other options include percent 
+
+
+colstring = paste0(acscolumns, collapse = ",")
+
+# use year-2 since CHRR release years are two years ahead of ACS data years 
+initial = paste0("https://api.census.gov/data/", year-2, "/acs/acs5")
+
+#make the long url for api pull 
+typeurl = ifelse(apitype == "detailed", "?", 
+                 ifelse(apitype == "subject", "/subject?", 
+                        ifelse(apitype == "profile", "/profile?",
+                               "/cprofile")))
+urlc = paste0(initial, typeurl, "get=NAME,", colstring, "&for=county:*", key)
+urls = paste0(initial, typeurl, "get=NAME,", colstring, "&for=state:*", key)
+urln = paste0(initial, typeurl, "get=NAME,", colstring, "&for=us:1", key)
+
+#get county data
+c = read.csv(urlc)
+#get state data 
+s = read.csv(urls)
+# get national data 
+n = read.csv(urln)
+
+```
+
+# Clean up and calculations
+
+```{r}
+c$county = c$county.
+s$state = s$state.
+s$county = "000"
+n$state = "00"
+n$county = "000"
+
+a = rbind(c[,intersect(colnames(c), colnames(s))], s[,intersect(colnames(c), colnames(s))])
+b = rbind(a[,intersect(colnames(a), colnames(n))], n[,intersect(colnames(a), colnames(n))])
+
+b$state = gsub("]", "", b$state)
+b$statecode = stringr::str_pad(b$state, 2, side = "left", "0")
+b$county = gsub("]","", b$county)
+b$countycode = stringr::str_pad(b$county, 3, side = "left", "0")
+
+# Identify columns with names containing "M" and not matching "denom"
+selected_columns <- grep("E", colnames(b), value = TRUE)
+selected_columns <- setdiff(selected_columns, denom)  # Exclude the column matching denom
+
+# Convert selected columns to numeric
+b$num <- rowSums(as.data.frame(lapply(b[, selected_columns, drop = FALSE], as.numeric)), na.rm = TRUE)
+
+# Assign the denom column
+b$denom <- b[[denom]]
+
+
+
+b$rawvalue = (b$num/b$denom)
+
+# Identify columns with names containing "M" and not matching "denom"
+selected_columns <- grep("M", colnames(b), value = TRUE)
+
+# Remove entries that match `denom` except for the last character
+pattern <- paste0("^", substr(denom, 1, nchar(denom) - 1), ".?$")
+selected_columns <- selected_columns[!grepl(pattern, selected_columns)]
+
+
+# Calculate b$senum as the square root of the sum of squares
+b$senum <- sqrt(rowSums(as.data.frame(lapply(b[, selected_columns, drop = FALSE], function(x) (as.numeric(x)/1.645)^2)), na.rm = TRUE))
+#b$senum = ifelse(b$senum >0, b$senum/1.645, NA) 
+
+
+b$sedenom = ifelse(b[,gsub("E", "M",denom)] >0, b[,gsub("E", "M",denom)]/1.645, NA) 
+
+b$sep = ifelse(b$rawvalue == 1, b$senum/b$denom, 
+                  ifelse((b$senum^2 - (b$rawvalue^2 * b$sedenom^2)) <0, 
+                         (1/b$denom)*sqrt(b$senum^2 + (b$rawvalue^2*b$sedenom^2)),
+                         (1/b$denom)*sqrt(b$senum^2 - (b$rawvalue^2*b$sedenom^2))))
+
+b$cihigh = ifelse(b$rawvalue + (1.96*b$sep)>=1, 1, b$rawvalue + (1.96*b$sep))
+
+
+
+b$cilow = ifelse(b$rawvalue -(1.96*b$sep)<0, 0, b$rawvalue - (1.96*b$sep))
+# b$cihigh = ifelse(calctype == "ratio", b$rawvalue +(1.96*b$sep), 
+#                    ifelse(b$rawvalue + (1.96*b$sep)>=1, 1, b$rawvalue + (1.96*b$sep)))
+
+
+# remove puerto rico and any other regions outside of the standard 51 states 
+h = b[b$statecode <57,]
+hsub = h[,c("statecode", "countycode","num","denom","rawvalue","sep", "cilow", "cihigh")]
+
+# merge with fipscodes 
+hf = merge(fips, hsub, by = c("statecode", "countycode"), all.x = TRUE)
+
+
+
+
+#keep both old and new ct codes in the data! 
+hf = hf %>% select(-c(state, county, fipscode, sep))
+
+#make col names pretty 
+colnames(hf) = c("statecode", "countycode", paste0(measurenum, "_numerator"), 
+                   paste0(measurenum, "_denominator"), 
+                   paste0(measurenum, "_rawvalue"), 
+                   paste0(measurenum, "_cilow"),
+                   paste0(measurenum, "_cihigh"))
+
+```
+
+# Save data
+
+```{r}
+#save to project 
+write.csv(hf, file = here("measure_datasets/v059_r2025.csv"), row.names = FALSE)
+
+```

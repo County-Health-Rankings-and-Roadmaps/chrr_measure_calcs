@@ -1,0 +1,360 @@
+---
+title: "v003 v085 v122 - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## v003 Uninsured Adults 
+
+### Basic information
+
+- Description
+Percentage of adults under age 65 without health insurance.
+
+- What is the numerator?
+The numerator is the number of people ages 18 to 64 who currently have no health insurance coverage. A person is uninsured if they are not currently covered by insurance through a current/former employer or union, purchased from an insurance company, Medicare, Medicaid, Medical Assistance, any kind of government-assistance plan for those with low incomes or disability, TRICARE or other military health care, Indian Health Services, VA, or any other health insurance or health coverage plan.
+
+- What is the denominator?
+The denominator is the county population ages 18 to 64.
+
+## Raw data access
+
+**#Website to downloaded data**
+https://www.census.gov/data/datasets/time-series/demo/sahie/estimates-acs.html
+
+**Online documentation** 
+https://www.census.gov/programs-surveys/sahie/technical-documentation/methodology.html
+
+**Directions**
+Use https://www2.census.gov/programs-surveys/sahie/technical-documentation/file-layouts/sahie-file-layout-2008-2022.pdf to select the appropriate categories for:
+
+- `agecat` (i.e., age category): = 1 (18 to 64 years)
+- `racecat` (race category): = 0 (All races)
+- `sexcat` (sex category): = 0 (Both sexes)
+- `iprcat` (i.e., income category): =  0  (All income levels)
+
+The measure is already calculated. But a 95% confidence interval is constructed by converting the 90% margin of error to 95%.
+
+Confidence limits = (v003_numerator/v003_denominator) +/- ((1.96*v003_moe)/164.5)
+
+v003_moe = pctui_moe
+
+## v085 Uninsured
+
+### Basic information
+
+- Description
+Percentage of population under age 65 without health insurance.
+
+- What is the numerator?
+The numerator is the number of people currently uninsured in the county under the age of 65.
+
+- What is the denominator?
+The denominator is the number of people in the county under age 65.
+
+### Raw data access
+
+**Website to downloaded data**
+https://www.census.gov/data/datasets/time-series/demo/sahie/estimates-acs.html
+
+**Online documentation** 
+https://www.census.gov/programs-surveys/sahie/technical-documentation/methodology.html
+
+**Directions**
+Use https://www2.census.gov/programs-surveys/sahie/technical-documentation/file-layouts/sahie-file-layout-2008-2022.pdf to select the appropriate categories for:
+
+- `agecat` (i.e., age category): = 0 (Under 65 years)
+- `racecat` (race category): = 0 (All races)
+- `sexcat` (sex category): = 0 (Both sexes)
+- `iprcat` (i.e., income category): =  0  (All income levels)
+
+The measure is already calculated. But a 95% confidence interval is constructed by converting the 90% margin of error to 95%.
+
+Confidence limits = (v085_numerator/v085_denominator) +/- ((1.96*v085_moe)/164.5)
+
+v085_moe = pctui_moe
+
+## v122 Uninsured Children
+
+### Basic information
+
+- Description
+Percentage of children under age 19 without health insurance.
+
+- What is the numerator?
+The numerator is the number of people under age 19 who currently have no health insurance coverage. A person is uninsured if they are not currently covered by insurance through a current/former employer or union, purchased from an insurance company, Medicare, Medicaid, Medical Assistance, any kind of government-assistance plan for those with low incomes or disability, TRICARE or other military health care, Indian Health Services, VA, or any other health insurance or health coverage plan.
+
+- What is the denominator?
+The denominator is the county population under age 19.
+
+## Raw data access
+
+**Website to downloaded data**
+https://www.census.gov/data/datasets/time-series/demo/sahie/estimates-acs.html
+
+**Online documentation** 
+https://www.census.gov/programs-surveys/sahie/technical-documentation/methodology.html
+
+**Directions**
+Use https://www2.census.gov/programs-surveys/sahie/technical-documentation/file-layouts/sahie-file-layout-2008-2022.pdf to select the appropriate categories for:
+
+- `agecat` (i.e., age category): = 4 (Under 19 years)
+- `racecat` (race category): = 0 (All races)
+- `sexcat` (sex category): = 0 (Both sexes)
+- `iprcat` (i.e., income category): = 0 (All income levels)
+
+The measure is already calculated. But a 95% confidence interval is constructed by converting the 90% margin of error to 95%.
+
+Confidence limits = (v122_numerator/v122_denominator) +/- ((1.96*v122_moe)/164.5)
+
+v122_moe = pctui_moe
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# helpers
+
+## get_sahie_measures()
+```{r}
+# func: get_sahie_measures ---------
+#' get_sahie_measures(df_sahie, df_fips, age_cat, vnum)
+#' This function helps calculate v003, v085 and v122 
+#'
+#' @param df_sahie df of sahie data set
+#' @param df_fips df with standard state and county fips.
+#' @param age_cat age category
+#' @param vnum measure number.
+#'
+#' @return A dataframe.
+#' @export
+#'
+#' @examples
+#' 
+
+get_sahie_measures <- function(df_sahie, df_fips, age_cat, vnum){
+  # county + state data
+  df_1 <- df_sahie %>% 
+    filter(agecat == age_cat, # 1: for 18 to 64 years
+           racecat == 0, sexcat == 0, iprcat == 0) %>% 
+    select(-c(agecat, racecat, sexcat, iprcat))
+
+  # national value
+  df_us <- df_1 %>% 
+    filter(countycode == "000") %>% 
+    summarise(statecode = "00", countycode = "000",
+              nipr = sum(nipr), nui = sum(nui))
+  
+  # county + state + us
+  df_3 <- bind_rows(df_1, df_us) %>%
+    arrange(statecode, countycode)
+  
+  # standard fips
+  df_4 <- df_fips %>% 
+    select(statecode, countycode) %>% 
+    left_join(df_3, by = c("statecode", "countycode"))
+  
+  # calculate rawvalue and CI's
+  df_5 <- df_4 %>% 
+    select(statecode, countycode, numerator = nui, denominator = nipr, pctui_moe) %>% 
+    mutate(rawvalue = numerator/denominator, .after = "denominator") %>% 
+    mutate(cilow = rawvalue - 1.96 * pctui_moe/1.645/100,
+           cihigh = rawvalue + 1.96 * pctui_moe/1.645/100,
+           sourceflag = NA_real_) %>% 
+    select(-pctui_moe)
+  
+  # standardize column names
+  res <- df_5 %>% 
+    rename(!!(paste0(vnum, "_numerator")) := numerator, 
+           !!(paste0(vnum, "_denominator")) := denominator, 
+           !!(paste0(vnum, "_rawvalue")) := rawvalue, 
+           !!(paste0(vnum, "_cilow")) := cilow,
+           !!(paste0(vnum, "_cihigh")) := cihigh,
+           !!(paste0(vnum, "_sourceflag")) := sourceflag)
+  
+  print(dim(res))
+  
+  return(res)
+  
+}
+```
+
+
+## add flag_CT
+
+- This function adds a flag to the data frame for Connecticut counties.
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+```
+
+# raw data
+
+```{r}
+# data
+sahie_raw <- read_csv("../raw_data/SAHIE/sahie-2022-csv.zip",
+                       skip = 83) %>% 
+  janitor::clean_names() %>% 
+  glimpse()
+
+sahie_1 <- sahie_raw %>% 
+  select(statecode = statefips, countycode = countyfips, 
+         agecat, racecat, sexcat, iprcat, 
+         nipr, nipr_moe, nui, nui_moe, pctui_moe) %>% 
+  mutate(across(c(nipr, nipr_moe, nui, nui_moe, pctui_moe), ~ as.numeric(.))) %>% 
+  glimpse()
+```
+
+## variables
+
+```{r}
+tibble::tribble(
+   ~var_short,  ~var_full, ~value,  ~description,
+     "agecat", "Age category", 0L,  "Under 65 years",
+     "agecat", "Age category", 1L,   "18 to 64 years",
+     "agecat", "Age category", 2L,   "40 to 64 years",
+     "agecat", "Age category", 3L,   "50 to 64 years",
+     "agecat", "Age category", 4L,   "Under 19 years",
+     "agecat", "Age category", 5L,   "21 to 64 years",
+    "racecat", "Race category", 0L,  "All races",
+    "racecat", "Race category", 1L,  "White alone",
+    "racecat", "Race category", 2L,  "Black alone",
+    "racecat", "Race category", 3L,   "Hispanic (any race)",
+     "sexcat", "Sex category",  0L,    "Both sexes",
+     "sexcat", "Sex category",  1L,     "Male",
+     "sexcat", "Sex category",  2L,  "Female",
+     "iprcat", "Income category", 0L, "All income levels",
+     "iprcat", "Income category", 1L, "At or below 200% of poverty",
+     "iprcat", "Income category", 2L, "At or below 250% of poverty",
+     "iprcat", "Income category", 3L, "At or below 138% of poverty",
+     "iprcat", "Income category", 4L, "At or below 400% of poverty",
+     "iprcat", "Income category", 5L, "Between 138% - 400%  of poverty",
+       "NIPR", "Number in demographic group for <income category>", NA, NA,
+   "nipr_moe",  "MOE  for NIPR", NA,   NA,
+        "NUI",  "Number uninsured", NA, NA,
+    "nui_moe",  "MOE  for NUI",   NA, NA,
+      "PCTUI", "Percent uninsured in demographic group for <income category>",  NA,   NA,
+  "pctui_moe", "MOE  for PCTUI",  NA, NA
+  ) 
+
+```
+
+# v003
+
+`agecat` (i.e., age category): = 1 (18 to 64 years)
+`racecat` (race category): = 0 (All races)
+`sexcat` (sex category): = 0 (Both sexes)
+`iprcat` (i.e., income category): =  0  (All income levels)
+
+`nui`: numerator, Number uninsured   
+`nipr`: denominator; `NIPR`: Number in demographic group for <income category>
+`pctui_moe`: margin of error; `PCTUI`: Percent uninsured in demographic group for <income category>
+
+## process data
+
+```{r}
+v003 <- get_sahie_measures(
+  df_sahie = sahie_1, 
+  df_fips = fips,
+  age_cat = 1, # age: 18 to 64 years
+  vnum = "v003") %>% 
+  add_flag_CT(vnum = "v003", old="U", new = "A") %>% 
+  glimpse()
+```
+
+## save data
+
+```{r}
+write_csv(v003,
+          paste0("../measure_datasets/", "v003", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+# v085
+
+## process data
+
+```{r}
+v085 <- get_sahie_measures(
+  df_sahie = sahie_1, 
+  df_fips = fips,
+  age_cat = 0, # age: under 65
+  vnum = "v085") %>% 
+  add_flag_CT(vnum = "v085", old="U", new = "A") %>% 
+  glimpse()
+
+```
+
+## save data
+
+```{r}
+write_csv(v085,
+          paste0("../measure_datasets/", "v085", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+# v122
+
+## process data
+
+```{r}
+v122 <- get_sahie_measures(
+  df_sahie = sahie_1, 
+  df_fips = fips,
+  age_cat = 4, # age: under 19
+  vnum = "v122") %>% 
+  add_flag_CT(vnum = "v122", old="U", new = "A") %>% 
+  glimpse()
+```
+
+## save data
+
+```{r}
+write_csv(v122,
+          paste0("../measure_datasets/", "v122", "_r2025",
+                 ".csv"),
+          na = "")
+```
+

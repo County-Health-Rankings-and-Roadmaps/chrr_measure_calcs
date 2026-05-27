@@ -1,0 +1,1198 @@
+---
+title: "v062 Mental Health Providers, v131 Other Primary Care Providers - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## v062 - Mental Health Providers 
+
+### Basic information
+
+- Description
+Ratio of population to mental health providers.
+
+- What is the numerator?
+The number of psychiatrists, psychologists, licensed clinical social workers, counselors, marriage and family therapists, and advanced practice nurses from 2024 specializing in mental health.
+
+- What is the denominator?
+Total 2023 resident population of a county obtained from the 2023 Vintage Census population estimates. 
+
+### Raw data access
+
+**#Website to downloaded data**
+https://download.cms.gov/nppes/NPI_Files.html
+
+**Online documentation** 
+https://www.cms.gov/Regulations-and-Guidance/Administrative-Simplification/NationalProvIdentStand/DataDissemination.html
+
+**Directions**
+
+The "Full Replacement Monthly NPI File" is a large file (~ 9 GB) with a line for each provider. Individual and Organizational Providers can be searched for here: https://npiregistry.cms.hhs.gov/. Providers that fit into the "mental health providers" category have the following healthcare provider taxonomy codes: 2084P0800X, 103T00000X, 103TC2200X, 103TB0200X, 103TC1900X, 103TF0000X, 103TS0200X, 103TC0700X, 1041C0700X, 363LP0808X, 2084P0804X, 2084P0805X, 364SP0808X, 364SP0809X, 364SP0807X, 364SP0810X, 364SP0811X, 364SP0812X, 364SP0813X, 101Y00000X, 101YM0800X, 101YA0400X, 101YP2500X, 103TA0400X, 2084A0401X, 2084P0802X, and 106H00000X.
+
+## v131 - Other Primary Care Providers
+
+### Basic information
+
+- Description
+Ratio of population to primary care providers other than physicians.
+
+- What is the numerator?
+The number of nurse practitioners, physician assistants, and clinical nurse specialists in 2024.
+
+- What is the denominator?
+Total 2023 resident population of a county obtained from the 2023 Vintage Census population estimates. 
+
+### Raw data access
+
+**#Website to downloaded data**
+https://download.cms.gov/nppes/NPI_Files.html
+
+**Online documentation** 
+https://www.cms.gov/Regulations-and-Guidance/Administrative-Simplification/NationalProvIdentStand/DataDissemination.html
+
+**Directions**
+
+The "Full Replacement Monthly NPI File" is a large file (over 9 GB) with a line for each provider. Individual and Organizational Providers can be searched for here: https://npiregistry.cms.hhs.gov/. Providers that fit into the "other primary care provider" category have the following healthcare provider taxonomy codes: 363L00000X, 363LC1500X, 363LF0000X, 363LX0001X, 363LP0200X, 363LP2300X, 363A00000X, and 363AM0700X.
+
+**Note**: The SAS zipcode data is needed to assign a provider to a county based on the zipcode. Downloading SAS zipcode data requries a SAS license number.
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+library(data.table)
+library(httr)
+library(jsonlite)
+```
+
+# set up directory
+
+```{r}
+# set up directory that holds data needed for calculations
+# NPI data, too large to put on GitHub
+npi_dir <- "C:/01_CHRR/data/r2025/raw/NPI"
+
+# SAS zipcode data
+sas_zip_dir <- "C:/01_CHRR/SAS/CHR_Ranking_2025/001_sas_zipcode/zipcode_exported"
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# helpers
+
+## function: types of mental health provider 
+```{r}
+mh_providers_ls <- c('2084P0800X', '103T00000X', '103TC2200X', '103TB0200X', 
+                     '103TC1900X', '103TF0000X', '103TS0200X', '103TC0700X', 
+                     '1041C0700X', '363LP0808X', '2084P0804X', '2084P0805X', 
+                     '364SP0808X', '364SP0809X', '364SP0807X', '364SP0810X', 
+                     '364SP0811X', '364SP0812X', '364SP0813X', '101Y00000X', 
+                     '101YM0800X', '101YA0400X', '101YP2500X', '103TA0400X', 
+                     '2084A0401X', '2084P0802X', '106H00000X')
+
+get_mh_type <- function(taxonomy_code){
+  type <- case_when(
+    taxonomy_code == '2084P0800X' ~ 'psychiatry',
+    taxonomy_code == '103T00000X' ~ 'psychologist',
+    taxonomy_code == '103TC1900X' ~ 'psychologist',
+    taxonomy_code == '103TF0000X' ~ 'psychologist',
+    taxonomy_code == '103TS0200X' ~ 'psychologist',
+    taxonomy_code == '103TC0700X' ~ 'psychologist',
+    taxonomy_code == '1041C0700X' ~ 'social worker',
+    taxonomy_code == '363LP0808X' ~ 'np-psychiatry',
+    taxonomy_code == '2084P0804X' ~ 'psychiatry',
+    taxonomy_code == '2084P0805X' ~ 'psychiatry',
+    taxonomy_code == '364SP0808X' ~ 'np-psychiatry',
+    taxonomy_code == '364SP0809X' ~ 'np-psychiatry',
+    taxonomy_code == '364SP0807X' ~ 'np-psychiatry',
+    taxonomy_code == '364SP0810X' ~ 'np-psychiatry',
+    taxonomy_code == '364SP0811X' ~ 'np-psychiatry',
+    taxonomy_code == '364SP0812X' ~ 'np-psychiatry',
+    taxonomy_code == '364SP0813X' ~ 'np-psychiatry',
+    taxonomy_code == '103TC2200X' ~ 'psychologist',
+    taxonomy_code == '103TB0200X' ~ 'psychologist',
+    taxonomy_code == '101Y00000X' ~ 'counselor',
+    taxonomy_code == '101YM0800X' ~ 'counselor',
+    taxonomy_code == '101YA0400X' ~ 'counselor',
+    taxonomy_code == '101YP2500X' ~ 'counselor',
+    taxonomy_code == '103TA0400X' ~ 'psychologist',
+    taxonomy_code == '2084A0401X' ~ 'psychiatry',
+    taxonomy_code == '2084P0802X' ~ 'psychiatry',
+    taxonomy_code == '106H00000X' ~ 'marriage',
+    TRUE ~ NA_character_
+  )
+  
+  return(type)
+}
+
+```
+
+## func: types of other primary care providers 
+
+```{r}
+other_providers_ls <- c('363L00000X', '363LC1500X', '363LF0000X', '363LX0001X',
+                        '363LP0200X', '363LP2300X', '363A00000X', '363AM0700X')
+
+get_other_type <- function(taxonomy_code){
+  type <- case_when(
+    taxonomy_code == '363L00000X' ~ 'nurse practitioner',
+    taxonomy_code == '363LC1500X' ~ 'nurse practitioner',
+    taxonomy_code == '363LF0000X' ~ 'nurse practitioner',
+    taxonomy_code == '363LX0001X' ~ 'nurse practitioner',
+    taxonomy_code == '363LP0200X' ~ 'nurse practitioner',
+    taxonomy_code == '363LP2300X' ~ 'nurse practitioner',
+    taxonomy_code == '363A00000X' ~ 'phys assistant',
+    taxonomy_code == '363AM0700X' ~ 'phys assistant',
+    TRUE ~ NA_character_
+  )
+  
+  return(type)
+}
+
+```
+
+## function: update zip codes in AR and OH
+```{r}
+update_zip <- function(zipcode){
+  zip <- case_when(
+    # Arizona
+    zipcode == '85222' ~ '85122',
+    zipcode == '85220' ~ '85120',
+    zipcode == '85242' ~ '85142',
+    zipcode == '85273' ~ '85173',
+    zipcode == '85247' ~ '85147',
+    zipcode == '85239' ~ '85139',
+    zipcode == '85237' ~ '85137',
+    zipcode == '85223' ~ '85123',
+    zipcode == '85231' ~ '85131',
+    zipcode == '85238' ~ '85138',
+    zipcode == '85240' ~ '85140',
+    zipcode == '85243' ~ '85143',
+    zipcode == '85232' ~ '85132',
+    zipcode == '85228' ~ '85128',
+    zipcode == '85219' ~ '85119',
+    zipcode == '85218' ~ '85118',
+    # Ohio
+    zipcode == '43624' ~ '43604',
+    zipcode %in% c('45408', '45418', '45427') ~ '45417',
+    TRUE ~ zipcode
+  )
+  return(zip)
+}
+
+```
+
+## function: fix county fips
+
+```{r}
+fix_cnty_fipx <- function(statecode, countycode){
+  
+  fixed_code <- case_when(
+    statecode == '02' & countycode == '270' ~ '158',
+    statecode == '02' & countycode == '280' ~ '195',
+    statecode == '46' & countycode == '113' ~ '102',
+    TRUE ~ countycode
+  )
+  
+  return(fixed_code)
+}
+```
+
+## function: geocode_by_coordinates using Census geocoder API (from lon/lat to county FIPS code)
+
+```{r}
+geocode_by_coordinates <- function(latitude, longitude, benchmark = "Public_AR_Current", vintage = "Current_Current") {
+  
+  # Print the coordinates
+  print(paste0("latitude: ",latitude, "; longitude: ", longitude))
+  
+  # API URL for the Census Geocoder
+  url <- "https://geocoding.geo.census.gov/geocoder/geographies/coordinates"
+  
+  # Define query parameters for the API request
+  params <- list(
+    x = longitude,
+    y = latitude,
+    # Benchmark for the geographic data
+    benchmark = benchmark,
+    # Vintage (year) of the geographic data
+    vintage = vintage,
+    # Desired response format (JSON in this case)
+    format = "json"
+  )
+  
+  # Send a GET request to the Census Geocoder API with the specified parameters
+  response <- GET(url, query = params)
+  
+  # Check if the request was successful (HTTP status code 200 indicates success)
+  if (status_code(response) != 200) {
+    stop("Request failed with status code: ", status_code(response))
+  }
+  
+  # Parse JSON response
+  content <- content(response, as = "text", encoding = "UTF-8")
+  result <- fromJSON(content)
+  
+  # return the county FIPS Code from the response
+  return(result$result$geographies$Counties$GEOID)
+}
+```
+
+## add flag_CT
+
+- This function adds a flag to the data frame for Connecticut counties.
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+```
+
+## standardize fips
+
+```{r}
+standardize_fips <- function(df){
+  res <- fips %>% 
+    select(statecode, countycode) %>% 
+    left_join(df, by = c("statecode", "countycode"))
+  
+  return(res)
+}
+
+```
+
+## save data
+
+```{r}
+save_data <- function(df, vnum, output_dir = "../measure_datasets/") {
+  df %>%
+    write_csv(paste0(output_dir, vnum, "_r2025.csv"), na = "")
+}
+```
+
+# import zip data downloaded from SAS
+
+from https://documentation.sas.com/doc/en/pgmmvacdc/9.4/grmapref/n1cqwrpowwd4l6n1lmw39ughjpuh.htm
+
+- downloading SAS zipcode data requires a SAS license 
+- we will not put SAS zip data on GitHub
+
+```{r}
+tibble::tribble(
+          ~Name,                                                                                                                                                  ~Label,
+          "ZIP",                                                                                                                              "The five-digit ZIP code.",
+            "Y",                                                                                             "Latitude (decimal degrees) of the center of the ZIP code.",
+            "X",                                                                                            "Longitude (decimal degrees) of the center of the ZIP code.",
+    "ZIP_CLASS",                "ZIP code Classification: P=PO Box, U=Unique zip used for large organizations or businesses or buildings, Blank=Standard or non-unique.",
+         "CITY",                                                                                                                     "Name of the city or organization.",
+        "STATE",                                                                                              "Two-digit number (FIPS code) for the state or territory.",
+    "STATECODE",                                                                                                           "Two-letter abbreviation for the state name.",
+    "STATENAME",                                                                                                                  "Full name of the state or territory.",
+       "COUNTY",                                                                                                                                     "FIPS county code.",
+     "COUNTYNM",                                                                                                                             "Name of county or parish.",
+          "MSA",                                                                 "Metropolitan Service Area code by common population pre-2003; no MSA for rural areas.",
+     "AREACODE",                                                                                                                    "Single Area Code for the ZIP code.",
+    "AREACODES",                                                                                                                 "Multiple Area Codes for the ZIP code.",
+     "TIMEZONE",                                                                                                                           "Time Zone for the ZIP code.",
+    "GMTOFFSET",                                                                                        "Difference (hours) between GMT and Time Zone for the ZIP code.",
+          "DST",                                                                                                 "ZIP code observes Eastern Time. Y is Yes and N is No.",
+       "PONAME",                                                                                                                  "USPS Post Office Name: same as City.",
+   "ALIAS_CITY",                                                                                                     "USPS – Alternate names of city separated by “||”.",
+  "ALIAS_CITYN",                                                                                                    "Local – alternate names of city separated by “||”.",
+        "CITY2", "Clean CITY name for geocoding; Note: Values are converted to uppercase and all spaces and characters that are not alphabetic or numeric are stripped.",
+   "STATENAME2", "Clean STATENAME for geocoding; Note: Values are converted to uppercase and all spaces and characters that are not alphabetic or numeric are stripped."
+  )
+
+```
+
+
+```{r}
+zip_sas_2024 <- haven::read_sas(
+  file.path(sas_zip_dir, "zipcode_may2024.sas7bdat")
+  )
+
+zip_sas <- zip_sas_2024 %>% 
+  janitor::clean_names() %>% 
+  select(zip, statecode = state, countycode = county, countynm, x , y) %>% 
+  mutate(zip = str_pad(zip, width = 5, side = "left", pad = "0")) %>% 
+  mutate(statecode = str_pad(statecode, width = 2, side = "left", pad = "0"),
+         countycode = str_pad(countycode, 3, "left", "0")) %>% 
+  glimpse()
+
+zip_sas 
+```
+
+### Connecticut (09): still old CT counties
+```{r}
+zip_sas %>% 
+  filter(statecode == "09") %>% 
+  distinct(countycode)
+```
+
+# import NPI data
+
+## NPI data file header
+
+```{r}
+fileheader <- read_csv(file.path(npi_dir, "npidata_pfile_20050523-20240609_fileheader.csv"))
+
+tibble(
+  field = names(fileheader)
+) %>% 
+  mutate(number = row_number(), .before = 1)
+```
+
+- we only need a few columns/variables, rather than all 330 columns
+- the raw data ("npidata_pfile_20050523-20240609.csv") exceeds 9 GB in size; creating a smaller dataset by retaining only the necessary variables will be more efficient for processing.
+
+## fread
+
+-   select variables to import from the raw data
+
+ 1  npi,
+ 2  entity_type_code,
+ 6  provider_last_name_legal_name,
+ 7  provider_first_name,
+ 8  provider_middle_name,
+14  provider_other_last_name,
+31  provider_business_practice_location_address_city_name,
+32  provider_business_practice_location_address_state_name, # var32
+33  provider_business_practice_location_address_postal_code, # var33
+34  provider_business_practice_location_address_country_code_if_outside_u_s, # var34
+40  npi_deactivation_date,
+41  npi_reactivation_date
+48  healthcare_provider_taxonomy_code_1,
+52  healthcare_provider_taxonomy_code_2,
+
+### read in raw data, and then create and save a smaller dataset
+
+- run this part only for the first time to import the large raw file
+- then read in the smaller dataset created from this chunk in the next part
+- select variables by their positions
+```{r eval=FALSE}
+npi_202406_fread <- data.table::fread(
+  file.path(npi_dir, "npidata_pfile_20050523-20240609.csv"),
+  select = c( 1, 2, 6, 7, 8,14,31,32,33,34,40,41,48,52)
+         ) %>% 
+  janitor::clean_names()
+
+# fwrite() directly to gzipped
+data.table::fwrite(npi_202406_fread, file.path(npi_dir, "npi_202406.gz"))
+
+```
+
+### read in the smaller data set
+
+```{r}
+npi_202406 <- data.table::fread(
+  file.path(npi_dir, "npi_202406.gz")
+  ) %>% 
+  glimpse()
+
+```
+
+# data cleaning
+
+## keep individual providers - filter: `entity_type_code == 1`
+
+-   `entity_type_code` 1 is individuals
+-   `entity_type_code` 2 is organizations
+-   we only want individuals so we aren't double-counting;
+
+```{r}
+npi_ind <- npi_202406 %>% 
+  select(-c(provider_last_name_legal_name, provider_first_name, provider_middle_name,
+            provider_other_last_name, npi_deactivation_date, npi_reactivation_date,
+            healthcare_provider_taxonomy_code_2)) %>% 
+  filter(entity_type_code==1) %>% 
+  glimpse()
+
+npi_ind
+```
+
+# v062
+
+## mental health providers
+
+Healthcare Provider Taxonomy Code_1 (through 15)
+
+Taxonomy Codes: http://www.wpc-edi.com/reference/codelists/healthcare/health-care-provider-taxonomy-code-set/
+
+https://taxonomy.nucc.org/
+
+-   grabbing only the taxonomy codes we include in mental health providers
+
+```{r}
+type_of_provider <- tibble::tribble(
+~healthcare_provider_taxonomy_code,  ~type_of_provider,
+"'2084P0800X'", "psychiatry;",
+"'103T00000X'", "psychologist;",
+"'103TC2200X'", "clinical child & adolescent;",
+"'103TB0200X'", "cognitive & behavioral;",
+"'103TC1900X'", "counseling;",
+"'103TF0000X'", "family;",
+"'103TS0200X'", "school;",
+"'103TC0700X'", "psychologist,clinical;",
+"'1041C0700X'", "licensed clinical social worker;",
+"'363LP0808X'", "nurse practitioner - psychiatric/mental health;",
+"'2084P0804X'", "child & adolescent psychiatry;",
+"'2084P0805X'", "geriatric psychiatry;",
+"'364SP0808X'", "Psychiatric/Mental Health;",
+"'364SP0809X'", "Psychiatric/Mental Health, Adult;",
+"'364SP0807X'", "Psychiatric/Mental Health, Child & Adolescent;",
+"'364SP0810X'", "Psychiatric/Mental Health, Child & Family;",
+"'364SP0811X'", "Psychiatric/Mental Health, Chronically Ill;",
+"'364SP0812X'", "Psychiatric/Mental Health, Community;",
+"'364SP0813X'", "Psychiatric/Mental Health, Geropsychiatric;",
+"'101Y00000X'", "Counselor;",
+"'101YM0800X'", "Mental Health;",
+"'101YA0400X'", "counselor, addiction (substance abuse disorder);",
+"'101YP2500X'", "counselor, professional;",
+"'103TA0400X'", "psychologist, addiction (substance abuse disorder);",
+"'2084A0401X'", "psychiatry, addiction medicine;",
+"'2084P0802X'", "psychiatry, addiction psychiatry;",
+"'106H00000X'", "marriage and family therapist;"
+  )
+
+type_of_provider
+```
+
+## mental health providers
+
+```{r}
+npi_mentalhealth <- npi_ind %>% 
+  rename(taxonomy_code = healthcare_provider_taxonomy_code_1) %>% 
+  filter(taxonomy_code %in% mh_providers_ls) %>% 
+  mutate(type = get_mh_type(taxonomy_code)) %>% 
+  glimpse()
+
+npi_mentalhealth
+```
+
+## rename columns
+
+```{r}
+meantalhealth <- npi_mentalhealth %>% 
+  rename(city = provider_business_practice_location_address_city_name, 
+         state = provider_business_practice_location_address_state_name,
+         zip = provider_business_practice_location_address_postal_code,
+         country = provider_business_practice_location_address_country_code_if_outside_u_s
+         ) %>% 
+  mutate(zip = str_sub(zip, start = 1L, end = 5L)) %>% 
+  glimpse()
+
+meantalhealth
+```
+
+## update Arizona zip codes 
+
+```{r}
+meantalhealth_1 <- meantalhealth %>% 
+  mutate(zip=update_zip(zipcode = zip)) %>% 
+  glimpse()
+
+meantalhealth_1
+```
+
+## merging mental health data with zip codes to assign counties
+
+```{r}
+mentalhealth_counties <- meantalhealth_1 %>% 
+  left_join(zip_sas, by = "zip") %>% 
+  glimpse()
+
+```
+
+### observations (obs) not assigned to county
+
+```{r}
+obs_notassignedtocounty <- mentalhealth_counties %>% 
+  filter(is.na(countynm)) %>% 
+  glimpse()
+
+```
+
+### az_temp
+
+```{r}
+az_temp <- obs_notassignedtocounty %>% 
+  filter(state == "AZ")
+
+az_temp
+```
+
+### oh_temp
+
+```{r}
+oh_temp <- obs_notassignedtocounty %>% 
+  filter(state == "OH")
+oh_temp
+```
+
+## delete all observations that do not have a standard state abbreviation assigned or AE, AP, AA which are military providers
+
+Washington, D.C. zip code of `20307` belongs to Walter Reed Medical Center, which closed in 2011 and moved to Bethesda. Delete any provider 
+that uses this zipcode
+
+```{r}
+st_abb_ls<- sort(c(state.abb, "DC"))
+
+mentalhealth_counties2 <- mentalhealth_counties %>% 
+  filter(zip != "20307", state %in% c(st_abb_ls, 'AE', 'AP', 'AA')) 
+
+mentalhealth_counties2
+```
+
+## eliminate providers that weren't assigned a county by zip code
+
+```{r}
+mentalhealth_counties3 <- mentalhealth_counties2 %>% 
+  filter(!is.na(statecode)) %>% 
+  glimpse()
+
+```
+
+## fix county fips
+
+```{r}
+mentalhealth_counties5 <- mentalhealth_counties3 %>% 
+  filter(country == "US") %>% 
+  mutate(countycode = fix_cnty_fipx(statecode, countycode)) %>% 
+  glimpse()
+
+```
+
+## aggregate providers at the county-level
+
+### all counties
+
+```{r}
+mentalhealth_counties6 <- mentalhealth_counties5 %>% 
+  group_by(statecode, countycode) %>% 
+  summarise(provider_sum = n(), .groups = "drop") %>% 
+  glimpse()
+
+mentalhealth_counties6
+```
+
+### CT: old counties
+
+```{r}
+mentalhealth_counties6_CT_old <- mentalhealth_counties6 %>% 
+  filter(statecode == "09") 
+
+mentalhealth_counties6_CT_old
+```
+
+### CT: new counties
+
+#### Crosswalk: ZCTAs vs CT new counties
+
+ZCTAs, or zipcode tabulation areas
+
+```{r}
+CT_linked_zctas_counties <- read_csv(
+  "../inputs/CT_linked_zctas_counties_gl.csv",
+  col_types = cols(.default = col_character())
+  ) %>% 
+  glimpse()
+
+CT_linked_zctas_counties
+```
+
+#### zipcodes not in ZCTAs
+
+```{r}
+# zipcodes that are included in ZCTAs and need to repair
+mentalhealth_counties5 %>% 
+  select(statecode, zip) %>% 
+  filter(statecode == "09") %>% 
+  left_join(CT_linked_zctas_counties %>% 
+              select(zip = zcta5_2020, countycode_2022),
+            by = "zip") %>% 
+  filter(is.na(countycode_2022)) %>%
+  distinct(zip)
+```
+
+#### Census geocoder API: from lon/lat to county FIPS code
+
+```{r}
+CT_linked_zips_counties_add <- mentalhealth_counties5 %>% 
+  select(statecode, zip) %>% 
+  filter(statecode == "09") %>% 
+  left_join(CT_linked_zctas_counties %>% 
+              select(zip = zcta5_2020, countycode_2022),
+            by = "zip") %>% 
+  filter(is.na(countycode_2022)) %>%
+  distinct(zip) %>% 
+  left_join(
+    zip_sas %>% filter(statecode=="09") %>% select(zip, x, y),
+    by = "zip"
+  ) %>% 
+  mutate(fipscode_24 = Vectorize(geocode_by_coordinates)(latitude=y, longitude=x) ) %>% 
+  mutate(countycode_2022 = str_sub(fipscode_24, 3L, 5L)) %>% 
+  select(zip, countycode_2022)
+
+CT_linked_zips_counties_add 
+```
+
+zip   countycode_2022
+06030	110			
+06349	180			
+06102	110			
+06520	170			
+06504	170			
+06904	190			
+06508	170			
+06050	110			
+06501	170			
+06267	150			
+06721	140			
+06372	180			
+06156	110			
+06045	110			
+06829	190
+
+#### CT new counties
+
+```{r}
+mentalhealth_counties6_CT_new <- mentalhealth_counties5 %>% 
+  select(statecode, zip) %>% 
+  filter(statecode == "09") %>% 
+  left_join(
+    bind_rows(
+      CT_linked_zctas_counties %>% 
+        select(zip = zcta5_2020, countycode_2022),
+      CT_linked_zips_counties_add
+    ),
+    by = "zip") %>% 
+  group_by(statecode, countycode_2022) %>% 
+  summarise(provider_sum = n(), .groups = "drop") %>% 
+  rename(countycode = countycode_2022)
+
+mentalhealth_counties6_CT_new
+```
+
+## create state-level data
+
+### keeping observations that are not assigned a county, but have a valid state abbreviation
+
+```{r}
+mentalhealth_states_extraobs <- mentalhealth_counties %>% 
+  filter(is.na(statecode), state %in% st_abb_ls, zip != '20307') %>% 
+  glimpse()
+```
+
+### assign a statecode to extra observations
+
+```{r}
+mentalhealth_states_extraobs_1 <- mentalhealth_states_extraobs %>% 
+  select(-statecode) %>% 
+  left_join(fips %>% 
+              distinct(state, statecode),
+            by = "state") %>% 
+  glimpse()
+```
+
+### delete all observations that do not have a standard state abbreviation assigned or AE, AP, AA which are military providers
+
+```{r}
+mentalhealth_states_1 <- mentalhealth_counties %>% 
+  filter(zip != '20307') %>% 
+  filter(state %in% c(st_abb_ls, "AE", "AP", "AA")) %>% 
+  # deleting all observations that did not match a zip code and were not assigned a county
+  filter(!is.na(countycode)) %>% 
+  glimpse()
+
+mentalhealth_states_1
+```
+
+### stack mental health providers that were assigned a county, and those that weren't but were assigned a valid state
+
+```{r}
+mentalhealth_states_3 <- 
+  bind_rows(mentalhealth_states_1,
+            mentalhealth_states_extraobs_1) %>% 
+  filter(statecode != '72') %>% 
+  glimpse()
+```
+
+### aggregate providers to the state level
+
+```{r}
+mentalhealth_states_6 <- mentalhealth_states_3 %>% 
+  filter(country == "US", statecode != "78", statecode != "66") %>% 
+  ungroup() %>% 
+  group_by(statecode) %>% 
+  summarise(countycode = "000", provider_sum = n()) %>% 
+  glimpse()
+
+mentalhealth_states_6
+```
+
+## bringing in vintage population data for denominator
+
+```{r}
+vintage2023 <- read_sas("../inputs/vintage2023.sas7bdat") %>% 
+  janitor::clean_names() %>% 
+  select(statecode, countycode, pop = popestimate2023) %>% 
+  glimpse()
+
+```
+
+## stack state and county level data
+
+```{r}
+mentalhealth_counties_states <- bind_rows(
+  mentalhealth_counties6, 
+  mentalhealth_counties6_CT_new,
+  mentalhealth_states_6) %>% 
+  glimpse()
+
+```
+
+## merge mental health data with population data
+
+```{r}
+mentalhealth_counties_states_2 <- vintage2023 %>% 
+  left_join(mentalhealth_counties_states, by = c("statecode", "countycode")) %>% 
+  # calculating the alternate raw value
+  mutate(mentalhealth_rate = (pop/provider_sum)) %>% 
+  # assign proper variable names
+  rename(v062_numerator = provider_sum, v062_denominator = pop,
+         v062_rawalternatevalue = mentalhealth_rate) %>% 
+  # calculate raw value, add other standard variables 
+  mutate(v062_rawvalue = v062_numerator/v062_denominator,
+         v062_cilow = NA_real_, v062_cihigh = NA_real_,
+         v062_sourceflag = NA_real_) %>% 
+  glimpse()
+
+mentalhealth_counties_states_2
+```
+
+## suppression
+
+-   If a county has a population greater than 1,000 and 0 mental health providers, we set that county's value to missing
+
+```{r}
+npi_v062 <- mentalhealth_counties_states_2 %>% 
+  mutate(v062_numerator = if_else(is.na(v062_numerator), 0L, v062_numerator)) %>% 
+  mutate(v062_rawvalue = if_else(v062_numerator == 0 & v062_denominator >1000, NA_real_,
+                                 v062_rawvalue),
+         v062_rawalternatevalue= if_else(v062_numerator == 0 & v062_denominator >1000,
+                                         NA_real_, v062_rawalternatevalue)) %>% 
+  mutate(v062_rawvalue = if_else(v062_numerator == 0 & v062_denominator <=1000, 0,
+                                 v062_rawvalue)) %>% 
+  glimpse()
+```
+
+## national values
+
+```{r}
+npi_v062_us <- mentalhealth_counties_states_2 %>% 
+  filter(statecode != "00", countycode == "000") %>% 
+  select(v062_denominator, v062_numerator) %>% 
+  summarise_all(sum) %>% 
+  mutate(statecode = "00", countycode = "000", .before = "v062_denominator") %>% 
+  mutate(v062_rawvalue = v062_numerator/v062_denominator,
+         v062_rawalternatevalue = 1/v062_rawvalue)
+
+npi_v062_us
+```
+## add national values to county+state data
+
+```{r}
+v062 <- npi_v062 %>% 
+  filter(statecode != "00") %>% 
+  bind_rows(npi_v062_us) %>% 
+  arrange(statecode, countycode) %>% 
+  select(statecode, countycode, v062_numerator, v062_denominator, v062_rawvalue,
+         v062_rawalternatevalue, everything())
+
+v062
+```
+
+## standardize fips and add 'flag_CT'
+
+```{r}
+v062_2 <- v062 %>% 
+  standardize_fips() %>% 
+  add_flag_CT(vnum = "v062", old="U", new = "A")
+
+v062_2
+```
+
+## save data
+
+```{r}
+save_data(v062_2, "v062")
+```
+
+
+# v131  other primary care providers
+
+'363L00000X' then type = 'nurse practitioner';*nurse practitioner;
+'363LC1500X' then type = 'nurse practitioner';*nurse practitioner, community health;
+'363LF0000X' then type = 'nurse practitioner';*nurse practitioner, family;
+'363LX0001X' then type = 'nurse practitioner';*nurse practitioner, ob-gyn;
+'363LP0200X' then type = 'nurse practitioner';*nurse practitioner, pediatrics;
+'363LP2300X' then type = 'nurse practitioner';*nurse practitioner, primary care;
+'363A00000X' then type = 'phys assistant';*physician assistant;
+'363AM0700X' then type = 'phys assistant';*physician assistant, medical;
+
+## other providers
+
+```{r}
+otherprimarycare <- npi_ind %>% 
+  rename(taxonomy_code = healthcare_provider_taxonomy_code_1) %>% 
+  filter(taxonomy_code %in% other_providers_ls) %>% 
+  mutate(type = get_other_type(taxonomy_code)) %>% 
+  rename(city = provider_business_practice_location_address_city_name, 
+         state = provider_business_practice_location_address_state_name,
+         zip = provider_business_practice_location_address_postal_code,
+         country = provider_business_practice_location_address_country_code_if_outside_u_s
+         ) %>% 
+  mutate(zip = str_sub(zip, start = 1L, end = 5L)) %>% 
+  glimpse()
+
+otherprimarycare
+```
+
+## update Arizona zip codes
+
+```{r}
+otherprimarycare_1 <- otherprimarycare %>% 
+  mutate(zip=update_zip(zipcode = zip)) %>% 
+  glimpse()
+
+```
+
+## merging other primary care data with zip codes to assign counties
+
+```{r}
+otherprimarycare_counties <- otherprimarycare_1 %>% 
+  left_join(zip_sas, by = "zip") %>% 
+  glimpse()
+```
+
+### obs not assigned to county
+
+```{r}
+obs_notassignedtocounty_2 <- otherprimarycare_counties %>% 
+  filter(is.na(countynm)) %>% 
+  glimpse()
+```
+
+## delete the observations that do not have a provider
+
+```{r}
+otherprimarycare_counties2 <- otherprimarycare_counties %>% 
+  filter(zip != "20307", state %in% c(st_abb_ls, 'AE', 'AP', 'AA')) %>% 
+  glimpse()
+
+otherprimarycare_counties2
+```
+
+## eliminate providers that weren't assigned a county by zip code
+
+```{r}
+otherprimarycare_counties3 <- otherprimarycare_counties2 %>% 
+  filter(!is.na(statecode)) %>% 
+  glimpse()
+
+```
+
+## update old county codes and only keep observations that are assigned to 'US'
+
+```{r}
+otherprimarycare_counties5 <- otherprimarycare_counties3 %>% 
+  filter(country == "US") %>% 
+  mutate(countycode = fix_cnty_fipx(statecode, countycode)) %>% 
+  glimpse()
+```
+
+## aggregate providers at the county-level
+
+### all counties
+```{r}
+otherprimarycare_counties6 <- otherprimarycare_counties5 %>% 
+  group_by(statecode, countycode) %>% 
+  summarise(provider_sum = n(), .groups = "drop") %>% 
+  glimpse() 
+
+otherprimarycare_counties6
+```
+
+### CT: old
+
+```{r}
+otherprimarycare_counties6_CT_old <- otherprimarycare_counties6 %>% 
+  filter(statecode == "09") 
+
+otherprimarycare_counties6_CT_old
+```
+
+### CT: new
+
+#### zipcodes not in ZCTAs
+
+```{r}
+# zipcodes that need to repair
+otherprimarycare_counties5 %>% 
+  select(statecode, zip) %>% 
+  filter(statecode == "09") %>% 
+  left_join(CT_linked_zctas_counties %>% 
+              select(zip = zcta5_2020, countycode_2022),
+            by = "zip") %>% 
+  filter(is.na(countycode_2022)) %>%
+  distinct(zip) %>% 
+  arrange(zip)
+```
+
+#### Census geocoder API: from lon/lat to county FIPS code
+
+```{r}
+CT_linked_zips_counties_add_2 <- otherprimarycare_counties5 %>% 
+  select(statecode, zip) %>% 
+  filter(statecode == "09") %>% 
+  left_join(CT_linked_zctas_counties %>% 
+              select(zip = zcta5_2020, countycode_2022),
+            by = "zip") %>% 
+  filter(is.na(countycode_2022)) %>%
+  distinct(zip) %>% 
+  arrange(zip) %>% 
+  left_join(
+    zip_sas %>% filter(statecode=="09") %>% select(zip, x, y),
+    by = "zip"
+  ) %>% 
+  mutate(fipscode_24 = Vectorize(geocode_by_coordinates)(latitude=y, longitude=x) ) %>% 
+  mutate(countycode_2022 = str_sub(fipscode_24, 3L, 5L)) %>% 
+  select(zip, countycode_2022)
+
+CT_linked_zips_counties_add_2
+```
+
+zip   countycode_2022
+06011	140			
+06030	110			
+06050	110			
+06102	110			
+06115	110			
+06160	110			
+06349	180			
+06487	140			
+06504	170			
+06520	170			
+06721	140			
+06723	140			
+06856	190			
+06857	190			
+06904	190			
+06926	190
+
+#### CT new counties
+
+```{r}
+otherprimarycare_counties6_CT_new <- otherprimarycare_counties5 %>% 
+  select(statecode, zip) %>% 
+  filter(statecode == "09") %>% 
+  left_join(
+    bind_rows(
+      CT_linked_zctas_counties %>% 
+        select(zip = zcta5_2020, countycode_2022),
+      CT_linked_zips_counties_add_2
+    ),
+    by = "zip") %>% 
+  group_by(statecode, countycode_2022) %>% 
+  summarise(provider_sum = n(), .groups = "drop") %>% 
+  rename(countycode = countycode_2022)
+
+otherprimarycare_counties6_CT_new
+```
+
+## create state-level data
+
+### keeping observations that are not assigned a county, but have a valid state abbreviation
+```{r}
+otherprimarycare_states_extraobs <- otherprimarycare_counties %>% 
+  filter(is.na(statecode), state %in% st_abb_ls, zip != '20307') %>% 
+  glimpse()
+
+```
+
+### assign a statecode to extra observations
+
+```{r}
+otherprimarycare_states_extraobs_1 <- otherprimarycare_states_extraobs %>% 
+  select(-statecode) %>% 
+  left_join(fips %>% distinct(state, statecode),
+            by = "state") %>% 
+  glimpse()
+```
+
+### delete all observations that do not have a standard state abbreviation assigned or AE, AP, AA which are military providers
+
+```{r}
+otherprimarycare_states_1 <- otherprimarycare_counties %>% 
+  filter(zip != '20307') %>% 
+  filter(state %in% c(st_abb_ls, "AE", "AP", "AA")) %>% 
+  # deleting all observations that did not match a zip code and were not assigned a county
+  filter(!is.na(countycode)) %>% 
+  glimpse()
+
+```
+
+### stack health providers that were assigned a county, and those that weren't but were assigned a valid state
+
+```{r}
+otherprimarycare_states_3 <- 
+  bind_rows(otherprimarycare_states_1, 
+            otherprimarycare_states_extraobs_1) %>% 
+  filter(statecode != '72') %>% 
+  glimpse()
+
+```
+
+### aggregate providers to the state level
+
+```{r}
+otherprimarycare_states_6 <- otherprimarycare_states_3 %>% 
+  filter(country == "US", !(statecode %in% c("78", "66")) ) %>% 
+  ungroup() %>% 
+  group_by(statecode) %>% 
+  summarise(countycode = "000", provider_sum = n()) %>% 
+  glimpse()
+
+otherprimarycare_states_6
+```
+
+## stack state and county level data
+
+```{r}
+otherprimarycare_counties_states <- bind_rows(
+  otherprimarycare_counties6, 
+  otherprimarycare_counties6_CT_new,
+  otherprimarycare_states_6
+  ) %>% 
+  glimpse()
+
+```
+
+## merge other primary data with population data
+
+```{r}
+otherprimarycare_counties_states_2 <- vintage2023 %>% 
+  left_join(otherprimarycare_counties_states, by = c("statecode", "countycode")) %>% 
+  # calculating the alternate raw value
+  mutate(otherprimarycare_rate = (pop/provider_sum)) %>% 
+  # assign proper variable names
+  rename(v131_numerator = provider_sum, v131_denominator = pop,
+         v131_rawalternatevalue = otherprimarycare_rate) %>% 
+  # calculate raw value, add other standard variables 
+  mutate(v131_rawvalue = v131_numerator/v131_denominator,
+         v131_cilow = NA_real_, v131_cihigh = NA_real_,
+         v131_sourceflag = NA_real_)
+
+otherprimarycare_counties_states_2
+```
+
+## suppression
+
+-   If a county has a population greater than 4,000 and 0 "other primary care" providers, we set that county's value to missing
+
+```{r}
+npi_v131 <- otherprimarycare_counties_states_2 %>% 
+  mutate(v131_numerator = if_else(is.na(v131_numerator), 0L, v131_numerator)) %>% 
+  mutate(v131_rawvalue = if_else(v131_numerator == 0 & v131_denominator >4000, NA_real_,
+                                 v131_rawvalue),
+         v131_rawalternatevalue= if_else(v131_numerator == 0 & v131_denominator >4000,
+                                         NA_real_, v131_rawalternatevalue)) %>% 
+  mutate(v131_rawvalue = if_else(v131_numerator == 0 & v131_denominator <=4000, 0,
+                                 v131_rawvalue)) %>% 
+  glimpse()
+```
+
+## national values
+
+```{r}
+npi_v131_us <- otherprimarycare_counties_states_2 %>% 
+  filter(statecode != "00", countycode == "000") %>% 
+  select(v131_denominator, v131_numerator) %>% 
+  summarise_all(sum) %>% 
+  mutate(statecode = "00", countycode = "000", .before = "v131_denominator") %>% 
+  mutate(v131_rawvalue = v131_numerator/v131_denominator,
+         v131_rawalternatevalue = 1/v131_rawvalue)
+
+npi_v131_us
+```
+
+## add national values to county+state data and make DC county and DC state same values
+
+```{r}
+v131 <- npi_v131 %>%
+  filter(statecode != "00") %>%
+  # add national data
+  bind_rows(npi_v131_us) %>%
+  # make DC county and state same values
+  filter(!(statecode == "11" & countycode == "001")) %>%
+  bind_rows(npi_v131 %>%
+    filter(statecode == "11", countycode == "000") %>%
+    mutate(countycode = "001")) %>%
+  arrange(statecode, countycode) %>%
+  select(
+    statecode, countycode, v131_numerator, v131_denominator, v131_rawvalue,
+    v131_rawalternatevalue, everything()
+  ) %>% 
+  glimpse()
+
+```
+
+## standardize fips and add 'flag_CT'
+
+```{r}
+v131_2 <- v131 %>% 
+  standardize_fips() %>% 
+  add_flag_CT(vnum = "v131", old="U", new = "A")
+
+v131_2
+```
+
+## save data
+
+```{r}
+save_data(v131_2, "v131")
+```

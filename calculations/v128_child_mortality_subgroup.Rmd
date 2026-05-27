@@ -1,0 +1,495 @@
+---
+title: "v128 Child Mortality subgroup calculations - Rankings 2026"
+author: "GL; updated by how for 2026"
+date: "2025-08-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# Basic information 
+## Description: 
+Number of deaths among residents under age 20 per 100,000 population.
+
+##  Data Source: 
+National Center for Health Statistics - Mortality Files; Census Population Estimates Program
+
+## Numerator: 
+The numerator is the number of deaths occurring before the age of 20.
+
+## Denominator: 
+The denominator is the total population under the age of 20.
+
+## Raw data access
+
+- NCHS mortality and natality data 2020-2023: the data is requested
+
+- Census population estimates 2020-2023 from:
+https://www2.census.gov/programs-surveys/popest/datasets
+
+
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+```
+
+# set up directory
+
+```{r}
+# set up directory that holds data needed for calculations
+# NCHS mortality data, not allowed to share in GitHub
+nchs_mort_dir <- "D:/CHRR/mortality raw"
+
+# NCHS natality data, not allowed to share in GitHub
+nchs_nata_dir <- "D:/CHRR/natality raw"
+
+# Census county population estimates data
+census_pop_dir <- "D:/CHRR/pop raw"
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat"),
+  read_sas( "../inputs/state_fips.sas7bdat")) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+
+
+## subgroups: 7 total 
+
+```{r}
+tibble::tribble(
+  ~subgroup, ~description, 
+      
+   1L,    "Non-Hispanic, White",       
+   2L,    "Non-Hispanic, Black",       
+   3L,    "Non-Hispanic, AIAN",       
+   4L,    "Non-Hispanic, Asian",       
+   5L,    "Non-Hispanic, NHOPI",       
+   6L,    "Non-Hispanic, Two or more races (TOM)",   
+  
+   8L,    "Hispanic",  
+  ) 
+```
+
+
+
+## load helper functions
+
+-   some functions that can be used in general for mortality/natality measures
+
+```{r}
+source("../scripts/nchs_measure_helpers.R")
+```
+
+
+
+# pop data: from Census pop estimates
+
+## function to get tot pop
+
+```{r}
+get_census_tot_pop <- function(census_ct_estimates, year_num = 13, long = TRUE) {
+  
+  print(paste0("YEAR: ", year_num))
+  
+  # county pop: census pop estimates
+  ct_pop <- census_ct_estimates %>% 
+    # choose year, age groups
+    filter(year == year_num, agegrp %in% c(1,2,3,4))  %>% 
+    # select columns for single races
+    select(statecode = state, countycode = county, agegrp,
+           # Non-Hispanic: 6
+           starts_with("nhwa_"), # Not Hispanic, White alone
+           starts_with("nhba_"), # Not Hispanic, Black or African American alone
+           starts_with("nhia_"), # Not Hispanic, American Indian and Alaska Native alone
+           starts_with("nhaa_"), # Not Hispanic, Asian alone
+           starts_with("nhna_"), # Not Hispanic, Native Hawaiian and Other Pacific Islander alone
+           starts_with("nhtom_"), # NHTOM_MALE	Not Hispanic, Two or More Races male population
+           # Hispanic: 1
+           starts_with("h_"), # Hispanic
+    ) %>%  
+    mutate(
+      # 6: Non-Hispanic groups
+      nh_white = nhwa_male  + nhwa_female,
+      nh_black = nhba_male  + nhba_female,
+      nh_aian  = nhia_male  + nhia_female,
+      nh_asian = nhaa_male  + nhaa_female,
+      nh_nhopi = nhna_male  + nhna_female,
+      nh_tom   = nhtom_male + nhtom_female,
+      # 1: Hispanic 
+      hispanic = h_male  + h_female
+    ) %>% 
+    select(-c(nhwa_male:h_female)) %>% 
+    # fix counties
+    mutate(countycode = case_when(
+      statecode=='46' & countycode =='113' ~ '102',
+      statecode=='51' & countycode =='515' ~ '019',
+      statecode=='02' & countycode =='270' ~ '158',
+      statecode=='02' & countycode =='201' ~ '198',
+      TRUE ~ countycode
+    )) 
+  
+  
+  
+  
+   # state pop
+  st_pop<- ct_pop %>%
+    mutate(countycode = "000") %>% 
+    group_by(statecode, countycode) %>% 
+    summarise(across(c(nh_white:hispanic), ~sum(., na.rm = TRUE)), .groups = "drop")
+  
+  # us pop
+  us_pop <- ct_pop %>% 
+    mutate(statecode = "00", countycode = "000") %>% 
+    group_by(statecode, countycode) %>% 
+    summarise(across(c(nh_white:hispanic), ~sum(., na.rm = TRUE)), .groups = "drop")
+  
+  ## county + state + us data
+  pop_all <- bind_rows(
+    us_pop, 
+    st_pop, 
+    ct_pop) %>% 
+    arrange(statecode, countycode)
+  
+  
+   # long form or wide form
+  if(long){
+    
+    pop_all_long <- pop_all %>% 
+      pivot_longer(cols = c(nh_white:hispanic), names_to = "race", values_to = "pop") %>% 
+      mutate(race = case_when(
+        race == "nh_white" ~ 1,
+        race == "nh_black" ~ 2,
+        race == "nh_aian"  ~ 3,
+        race == "nh_asian" ~ 4,
+        race == "nh_nhopi" ~ 5,
+        race == "nh_tom"   ~ 6,
+        
+        race == "hispanic"  ~ 8,
+        TRUE ~ NA_real_))%>% 
+      arrange(statecode, countycode, race)
+    
+    return(pop_all_long)
+    
+  }
+  else{
+    return(pop_all)
+  }
+  
+}
+```
+
+## function to process pop data for v128
+
+```{r}
+process_pop_v128 <- function(year){
+  
+  pop <- read_census_pop(file_name = get_census_csv_file_info(year)$file_name ) %>% 
+    get_census_tot_pop(., year_num = get_census_csv_file_info(year)$year_num)
+  
+  return(pop)
+}
+```
+
+
+## 2020-2023 Census pop
+
+```{r}
+
+
+# use map
+pop_all <- bind_rows(
+  process_pop_v128(2020),  
+  process_pop_v128(2021),
+  process_pop_v128(2022) %>% 
+        fix_CT_pop(process_pop_v128(2021)),
+  process_pop_v128(2023) %>% 
+        fix_CT_pop(process_pop_v128(2021))) %>% 
+  group_by(statecode, countycode, race) %>%
+  summarise(pop = sum(pop), .groups = "drop") %>% 
+  # remove 02261
+  filter(!(statecode == "02" & countycode == "261")) %>%
+  glimpse()
+
+```
+
+
+
+# mort data
+
+-   Note: for convenience,  all mortality data files were named in the format as `MULT[YEAR]US.AllCnty.txt`
+
+## header
+
+```{r}
+mort_header <- tribble(
+  ~fld_name, ~start,  ~end,
+  "state_of_residence", 29,  30,
+  "county_of_residence", 35,  37,
+  "icd_code", 146, 149,
+  "age", 77, 78,
+  "race", 445, 446,
+  "race_recode_5", 450, 450,
+  "hispanic_origin", 484, 486,
+  "hispanic_origin_race_recode", 488, 488,
+  "race_recode_40", 489, 490
+)
+```
+
+## function to process one-year mort data for v128
+
+```{r}
+get_child_mort <- function(nchs_mort, df_fips){
+  mort_1 <- nchs_mort %>% 
+      # include only 50 states + DC
+    filter(state_of_residence %in% c(state.abb, "DC")) %>% 
+    filter(age %in% c("01", "02", "03", "04", "05", "06", "07", "08", "09")) %>% 
+    rename(state = state_of_residence, countycode = county_of_residence) %>% 
+    # fix county FIPS codes
+    mutate(countycode = case_when(
+      state =='SD' & countycode =='113' ~'102',
+      state =='AK' & countycode =='270' ~'158',
+      state =='VA' & countycode =='515' ~'019',
+      # state =='AK' & countycode =='063' ~'261',
+      # state =='AK' & countycode =='066' ~'261',
+      TRUE ~ countycode
+      )
+    )
+  
+  mort_2 <- mort_1 %>% 
+  # race
+    select(-race) %>% 
+    mutate(race_recode_40 = as.numeric(race_recode_40)) %>% 
+    mutate(
+    race = case_when(
+      # non-Hispanic
+    	hispanic_origin<200 & race_recode_40==1 ~ 1, # nh_white
+    	hispanic_origin<200 & race_recode_40==2 ~ 2, # nh_black
+    	hispanic_origin<200 & race_recode_40==3 ~ 3, # nh_aian
+    	hispanic_origin<200 & race_recode_40 %in% c(4:10)  ~ 4, # nh_Asian
+    	hispanic_origin<200 & race_recode_40 %in% c(11:14) ~ 5, # nh_NHOPI
+    	hispanic_origin<200 & race_recode_40 %in% c(15:40) ~ 6, # nh_two or more races
+    	
+      # Hispanic
+  	  hispanic_origin<300  ~ 8, # Hispanic
+
+    	TRUE ~ NA_real_
+    ))
+  
+  # county
+  mort_ct <- mort_2 %>% 
+    group_by(state, countycode, race) %>% 
+    summarise(deaths = n(), .groups = "drop")
+  
+  # state
+  mort_st <- mort_2 %>% 
+    group_by(state, race) %>% 
+    summarise(countycode = "000", deaths = n(), .groups = "drop") 
+  
+  # us
+  mort_us <- mort_2 %>% 
+    group_by(race) %>% 
+    summarise(state = "US", countycode = "000", deaths = n())
+  
+  mort_all <- bind_rows(mort_ct, mort_st, mort_us) %>% 
+    arrange(state, countycode) %>% 
+    # add statecode
+    left_join(df_fips %>% select(state, statecode) %>% 
+                distinct(),
+              by = c("state")) %>% 
+    ungroup() %>% 
+    select(-state) %>% 
+    select(statecode, everything()) %>% 
+    arrange(statecode, countycode, race) 
+  
+  return(mort_all)
+  
+}
+```
+
+## function to process mortality data for v128
+
+```{r}
+process_mort_v128 <- function(year){
+  
+  print(get_mort_file_name(year))
+  
+  mort <- read_mort_data(
+    file_path = file.path(nchs_mort_dir, get_mort_file_name(year) ), 
+    header = mort_header,
+    n_max = Inf) %>% 
+    get_child_mort(df_fips=fips)
+  
+  return(mort)
+}
+```
+
+
+## mort 4 years: use map
+
+-   fewer lines, same results as from processing one by one
+
+```{r eval=FALSE}
+mort_all <- c(2020:2023) %>% 
+  map(process_mort_v128) %>% 
+  list_rbind() %>% 
+  group_by(statecode, countycode, race) %>% 
+  summarise(deaths = sum(deaths), .groups = "drop") %>% 
+  # filter(age_cat != 99) %>% 
+  glimpse()
+
+```
+
+
+# mortality calculation
+
+## merge mort and pop data
+
+```{r}
+merged <- pop_all %>% 
+  left_join(mort_all, 
+            by = c("statecode", "countycode", "race")) %>% 
+  # # replace NA with 0 for deaths
+  # mutate(deaths = if_else(is.na(deaths), 0, deaths)) %>% 
+  glimpse()
+  
+```
+
+## confidence Intervals
+
+```{r}
+v128 <- merged %>%
+  rename(numerator = deaths, denominator = pop) %>%
+  mutate(
+    rawvalue = numerator / denominator *100000,
+    rse = 100 * sqrt(1/numerator),
+  ) %>%
+  mutate(
+    std = rawvalue * rse / 100,
+    cilow = rawvalue - 1.96 * std,
+    cihigh = rawvalue + 1.96 * std
+  ) %>%
+  select(-c(rse, std)) %>% 
+  glimpse()
+
+```
+
+## calculate CI L and U
+
+```{r}
+df_ci <- get_pois_CI()
+
+df_ci
+```
+
+```{r}
+suppress_limit <- 10
+
+v128_2 <- v128 %>% 
+  left_join(df_ci, by = c("numerator" = "n")) %>% 
+  mutate(cilow = if_else(numerator>= suppress_limit & numerator <=99,
+                         rawvalue * L, cilow),
+         cihigh = if_else(numerator>=suppress_limit & numerator <=99,
+                         rawvalue * U, cihigh)) %>% 
+  # mutate(v001_sourceflag = NA_real_) %>% 
+  select(-c(L, U)) %>% 
+  mutate(across(where(is.numeric), ~ if_else(numerator < suppress_limit, 
+                                            NA_real_, .x))) %>% 
+  mutate(sourceflag  = NA_real_) 
+
+
+
+```
+
+
+## get subgroups
+
+```{r}
+v128_other <- process_race_data_wide(v128_2, fips, "v128") %>% 
+  select(-c(ends_with('denominator'), ends_with('numerator')))
+
+```
+
+# add flag_CT
+
+```{r}
+v128_other_2 <- v128_other %>%
+  add_flag_CT(vnum="v128_race", old = "U", new = "A")
+
+```
+
+# compare initial and duplicated calculations
+
+```{r}
+compare_subgroup("v128", v128_other_2, 2026)
+```
+
+# save data
+```{r}
+save_data(v128_other_2, "v128_otherdata")
+```
+
+
+
+## get subgroup data in wide format
+
+### function to get a subgroup
+
+```{r}
+get_race_data <- function(df, race_cat = 1, race_group = "v128_race_white"){
+  v128_2 %>% 
+    filter(race == race_cat) %>% 
+    select(-race) %>% 
+    rename({{race_group}} := rawvalue) %>% 
+    rename_with(.fn = ~paste0(race_group, "_", .x), .cols = c("cilow" , "cihigh" ))
+}
+```
+
+### subgroup data
+
+```{r}
+white <- get_race_data(v128_2, race_cat = 1, race_group = "v128_race_white")
+black <- get_race_data(v128_2, race_cat = 2, race_group = "v128_race_black")
+aian  <- get_race_data(v128_2, race_cat = 3, race_group = "v128_race_aian")
+asian <- get_race_data(v128_2, race_cat = 4, race_group = "v128_race_asian")
+nhopi <- get_race_data(v128_2, race_cat = 5, race_group = "v128_race_nhopi")
+tom   <- get_race_data(v128_2, race_cat = 6, race_group = "v128_race_tom")
+
+hispanic <- get_race_data(v128_2, race_cat = 8, race_group = "v128_race_hispanic")
+
+```
+
+### bind columns
+
+```{r}
+v128_other <- purrr::reduce(
+  list(fips %>%  
+         select(1:2), 
+       white, black, aian, asian, nhopi, tom,
+       hispanic
+       ), 
+  dplyr::left_join, 
+  by = c("statecode", "countycode")) 
+
+v128_other
+```
+
+
+
+
+
+
+

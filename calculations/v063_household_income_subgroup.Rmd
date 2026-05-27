@@ -1,0 +1,236 @@
+---
+title: "v063_otherdata (subgroups) - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# About
+
+## Basic information
+
+- Description
+The income where half of households in a county earn more and half of households earn less.
+
+## Raw data access
+
+**Directions**
+
+Use ACS 5-year tables: B19013C (AI/AN), B19013D (Asian), B19013B (Black), B19013I (Hispanic), and B19013H (White, not Hispanic)
+
+Because we cannot combine Asian and NHOPI median incomes, the Asian group for this measure ONLY includes the Asian ACS table.
+
+If the lower confidence limit is 0 or below, the estimate is set to missing; we use a negative confidence limit as a measure of unreliability.
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat"),
+  read_sas( "../inputs/state_fips.sas7bdat")) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# helpers
+
+## add flag_CT
+
+- This function adds a flag to the data frame for Connecticut counties.
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+```
+
+## standardize fips
+
+```{r}
+standardize_fips <- function(df){
+  res <- fips %>% 
+    select(statecode, countycode) %>% 
+    left_join(df, by = c("statecode", "countycode"))
+  
+  return(res)
+}
+
+```
+
+## save data
+
+```{r}
+save_data <- function(df, vnum, output_dir = "../measure_datasets/") {
+  df %>%
+    write_csv(paste0(output_dir, vnum, "_r2025.csv"), na = "")
+}
+```
+
+# raw data
+
+## acs data: county, state, us
+```{r}
+acs5 <- read_csv("../raw_data/ACS/acs_data_2019-2023.zip")%>% 
+  rename(fipscode = GEOID) %>% 
+  glimpse()
+```
+
+# var list
+
+```{r}
+var_ls_063_other <- 
+  c('B19013B_001E', 'B19013B_001M', 
+    'B19013H_001E', 'B19013H_001M', 
+    'B19013I_001E', 'B19013I_001M', 
+    'B19013D_001E', 'B19013D_001M',
+    'B19013C_001E', 'B19013C_001M')
+```
+
+# processing
+```{r}
+v063_other_1 <- acs5 %>% 
+  select(1:3, all_of(var_ls_063_other)) %>% 
+  rename(
+    v063_race_black = B19013B_001E,
+    medinc_se_black = B19013B_001M,
+    
+    v063_race_white    =  B19013H_001E,
+    medinc_se_white_NH =  B19013H_001M,
+    
+    v063_race_hispanic = B19013I_001E,
+    medinc_se_hispanic = B19013I_001M,
+    
+    v063_race_asian= B19013D_001E,
+    medinc_se_asian= B19013D_001M,
+    
+    v063_race_aian = B19013C_001E,
+    medinc_se_aian = B19013C_001M
+  ) %>% 
+  mutate(medinc_se_black_sq = medinc_se_black**2,
+         medinc_se_white_NH_sq = medinc_se_white_NH**2,
+         medinc_se_hispanic_sq = medinc_se_hispanic**2,
+         medinc_se_asian_sq = medinc_se_asian**2,
+         medinc_se_aian_sq = medinc_se_aian**2
+         )
+```
+
+```{r}
+v063_other_2 <- v063_other_1 %>% 
+  mutate(v063_race_black = if_else(is.na(medinc_se_black), NA_real_,
+                                   v063_race_black),
+         v063_race_white = if_else(is.na(medinc_se_white_NH), NA_real_,
+                                   v063_race_white),
+         v063_race_hispanic = if_else(is.na(medinc_se_hispanic), NA_real_,
+                                   v063_race_hispanic),
+         v063_race_asian = if_else(is.na(medinc_se_asian), NA_real_,
+                                   v063_race_asian),
+         v063_race_aian = if_else(is.na(medinc_se_aian), NA_real_,
+                                   v063_race_aian)
+         ) %>% 
+  mutate(se_black = (sqrt(medinc_se_black_sq))*1.96/1.645,
+         se_white = (sqrt(medinc_se_white_NH_sq))*1.96/1.645,
+         se_hispanic = (sqrt(medinc_se_hispanic_sq))*1.96/1.645,
+         se_asian = (sqrt(medinc_se_asian_sq))*1.96/1.645,
+         se_aian = (sqrt(medinc_se_aian_sq))*1.96/1.645) %>% 
+  mutate(v063_race_white_cilow = v063_race_white - (se_white),
+         v063_race_white_cihigh = v063_race_white + (se_white),
+         v063_race_black_cilow = v063_race_black - (se_black),
+         v063_race_black_cihigh = v063_race_black + (se_black),
+         v063_race_hispanic_cilow = v063_race_hispanic - (se_hispanic),
+         v063_race_hispanic_cihigh = v063_race_hispanic + (se_hispanic),
+         v063_race_asian_cilow = v063_race_asian - (se_asian),
+         v063_race_asian_cihigh = v063_race_asian + (se_asian),
+         v063_race_aian_cilow = v063_race_aian - (se_aian),
+         v063_race_aian_cihigh = v063_race_aian + (se_aian))
+```
+
+```{r}
+v063_other_3 <- v063_other_2 %>% 
+  select(-starts_with(c("medinc", "se", "fipscode"))) %>% 
+  mutate(across(starts_with('v063_race_white'), ~if_else(
+    (v063_race_white_cilow < 0 ), NA_real_, .x))) %>% 
+  mutate(across(starts_with('v063_race_black'), ~if_else(
+    (v063_race_black_cilow < 0 ), NA_real_, .x))) %>% 
+  mutate(across(starts_with('v063_race_hispanic'), ~if_else(
+    (v063_race_hispanic_cilow < 0 ), NA_real_, .x))) %>% 
+  mutate(across(starts_with('v063_race_asian'), ~if_else(
+    (v063_race_asian_cilow < 0 ), NA_real_, .x))) %>% 
+  mutate(across(starts_with('v063_race_aian'), ~if_else(
+    (v063_race_aian_cilow < 0 ), NA_real_, .x)))
+
+```
+
+
+# supression
+
+per verification:
+
+V063_race: There were a few large outliers with non-overlapping C.I.s: 
+for Black, county 55085 jumped from 31,000 to 173,000 (missing in 2022 and 2023), 
+for Asian county 42131 jumped from 26,000 to 151,000 (missing in 2022 and 2023). 
+
+Suppression of values for the above cases.
+
+```{r}
+v063_other_4 <- v063_other_3 %>%
+  # Black 55085
+  mutate(across(starts_with("v063_race_black"), ~if_else(
+  statecode == '55' & countycode == '085', NA_real_, .x
+))) %>%
+  # Asian 42131
+  mutate(across(starts_with("v063_race_asian"), ~if_else(
+  statecode == '42' & countycode == '131', NA_real_, .x
+))) 
+
+v063_other_4
+```
+
+# add old CT counties and add flag_CT
+
+```{r}
+v063_other_5 <- v063_other_4 %>% 
+  standardize_fips() %>% 
+  add_flag_CT(vnum = "v063_race", old="U", new = "A")
+
+v063_other_5
+```
+
+# save
+
+```{r}
+v063_other_5 %>% 
+  save_data("v063_otherdata")
+
+```
+
+
+

@@ -1,0 +1,489 @@
+---
+title: "BRFSS v011, v060, v070, v180 - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## v011 Adult Obesity
+
+### Basic information
+
+- Description
+Percentage of the adult population (age 18 and older) that reports a body mass index (BMI) greater than or equal to 30 kg/m2 (age-adjusted).
+
+- What is the numerator?
+The numerator is the number of adult respondents age 18 and older with a BMI greater than or equal to 30kg/m2.
+
+- What is the denominator?
+The denominator is the number of adult respondents age 18 and older.
+
+### Raw data access
+
+**Directions**
+
+Two datasets are required
+
+(1) PLACES https://data.cdc.gov/500-Cities-Places/PLACES-County-Data-GIS-Friendly-Format-2024-releas/i46a-9kgh
+
+(2) U.S. Chronic Disease Indicators (CDI) https://data.cdc.gov/Chronic-Disease-Indicators/U-S-Chronic-Disease-Indicators/hksd-2xuw
+
+PLACES dataset is used to obtain county values: "Obesity_adjprev", "Obesity_adj95ci" 
+
+CDI dataset is used to obtain state values: where question = “Obesity among adults”
+
+When downloading CDI dataset, include the following filters:
+- YearStart: "2022"
+- YearEnd: "2022"
+- DataValueTypeID: "AGEADJPREV"     (keep data for age-adjusted prevalence)
+- StratificationCategoryID1: "OVERALL"     (keep data for overall population)
+
+**Online documentation**
+
+https://www.cdc.gov/places/methodology/index.html
+
+## v060 Diabetes Prevalence
+
+### Basic information
+
+- Description
+Percentage of adults aged 18 and above with diagnosed diabetes (age-adjusted).
+
+- What is the numerator?
+The numerator is the number of adults 18 years and older who responded "yes" to the question, "Has a doctor ever told you that you have diabetes?" Both Type 1 and Type 2 diabetes diagnoses are included. Women who indicated that they only had diabetes during pregnancy were not considered to have diabetes.
+
+- What is the denominator?
+The denominator is the total number of respondents (age 18 and older) in a county.
+
+### Raw data access
+
+**Directions**
+
+Two datasets are required
+
+(1) PLACES https://data.cdc.gov/500-Cities-Places/PLACES-County-Data-GIS-Friendly-Format-2024-releas/i46a-9kgh
+
+(2) U.S. Chronic Disease Indicators (CDI) https://data.cdc.gov/Chronic-Disease-Indicators/U-S-Chronic-Disease-Indicators/hksd-2xuw
+
+PLACES dataset is used to obtain county values: "Diabetes_adjprev", "Diabetes_adj95CI" 
+
+CDI dataset is used to obtain state values: where question = “Diabetes among adults”
+
+When downloading CDI dataset, include the following filters:
+- YearStart: "2022"
+- YearEnd: "2022"
+- DataValueTypeID: "AGEADJPREV"     (keep data for age-adjusted prevalence)
+- StratificationCategoryID1: "OVERALL"     (keep data for overall population)
+
+**Online documentation**
+
+https://www.cdc.gov/places/methodology/index.html
+
+## v070 Physical Inactivity
+
+### Basic information
+
+- Description
+Percentage of adults age 18 and over reporting no leisure-time physical activity (age-adjusted).
+
+- What is the numerator?
+The numerator is the number of respondents who answered "no" to the question, "During the past month, other than your regular job, did you participate in any physical activities or exercises such as running, calisthenics, golf, gardening, or walking for exercise?"
+
+- What is the denominator?
+The denominator is the number of respondents age 18 and older.
+
+### Raw data access
+
+**Directions**
+
+Two datasets are required
+
+(1) PLACES https://data.cdc.gov/500-Cities-Places/PLACES-County-Data-GIS-Friendly-Format-2024-releas/i46a-9kgh
+
+(2) U.S. Chronic Disease Indicators (CDI) https://data.cdc.gov/Chronic-Disease-Indicators/U-S-Chronic-Disease-Indicators/hksd-2xuw
+
+PLACES dataset is used to obtain county values: "LPA_adjprev", "LPA_adj95ci" 
+
+CDI dataset is used to obtain state values: where question = “No leisure-time physical activity among adults”
+
+When downloading CDI dataset, include the following filters:
+- YearStart: "2022"
+- YearEnd: "2022"
+- DataValueTypeID: "AGEADJPREV"     (keep data for age-adjusted prevalence)
+- StratificationCategoryID1: "OVERALL"     (keep data for overall population)
+
+**Online documentation**
+
+https://www.cdc.gov/places/methodology/index.html
+
+## v180 % Disability: Functional Limitations
+
+### Basic information
+
+- Description
+Percentage of adults reporting any of six specific functional limitations.
+
+- What is the numerator?
+The numerator is the number of respondents who answered ‘yes’ to at least one of the six following questions:
+
+    * “Are you deaf or do you have serious difficulty hearing?”
+    * “Are you blind or do you have serious difficulty seeing, even when wearing glasses?”
+    * “Because of a physical, mental, or emotional condition, do you have serious difficulty concentrating, remembering, or making decisions?”
+    * “Do you have serious difficulty walking or climbing stairs?”
+    * “Do you have difficulty dressing or bathing?”
+    * “Because of a physical, mental, or emotional condition, do you have difficulty doing errands alone such as visiting a doctor´s office or shopping?”
+
+- What is the denominator?
+The denominator is the total number of adult respondents in a county.
+
+### Raw data access
+
+**Directions**
+
+Two datasets are required
+
+(1) PLACES https://data.cdc.gov/500-Cities-Places/PLACES-County-Data-GIS-Friendly-Format-2024-releas/i46a-9kgh
+
+(2) Disability and Health Data System (DHDS)  https://data.cdc.gov/Disability-Health/Disability-and-Health-Data-System-DHDS-/k62p-6esq/data_preview
+
+PLACES dataset is used to obtain county values: "disability_adjprev", "disability_adj95ci" 
+
+DHDS dataset is used to obtain state and national values: where response = 'Any Disability'
+
+When downloading DHDS dataset, include the following filters:
+- YearStart: "2022"
+- YearEnd: "2022"
+- DataValueTypeID: "AGEADJPREV"     (keep data for age-adjusted prevalence)
+- StratificationCategoryID1: "OVERALL"     (keep data for overall population)
+
+**Online documentation**
+
+https://www.cdc.gov/places/methodology/index.html
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+df_county_fips <- fips %>% 
+  filter(countycode != "000") %>%  
+  select(1,2,5) %>% 
+  glimpse()
+
+df_state_fips <- fips %>% 
+  filter(countycode == "000") %>% 
+  select(statecode, countycode, state_abbr = state) %>% 
+  glimpse()
+```
+
+# raw data
+
+## PLACES 2024 release (2022 data ) - county data
+
+```{r}
+raw_dir <- "../raw_data/BRFSS/BRFSS_raw.zip"
+
+places_brfss_county <-  
+  read_csv(
+    unz(raw_dir, "PLACES__County_Data__GIS_Friendly_Format___2024_release_20250107.csv")
+    ) %>%
+  janitor::clean_names() %>% 
+  glimpse()
+```
+
+## US CDI - 2022 state data 
+
+```{r}
+us_cdi_st <-  
+  read_csv(
+    unz(raw_dir, "U.S._Chronic_Disease_Indicators_2022_all_20240826.csv")
+    ) %>% 
+  janitor::clean_names() %>% 
+  glimpse()
+```
+
+### CDI questions
+
+```{r}
+us_cdi_st %>% 
+  distinct(question, question_id)
+```
+
+## DHDS: state data
+
+```{r}
+dhds_st <- 
+  read_csv(
+    unz(raw_dir, "DHDS__20241009.csv")
+    ) %>%
+  janitor::clean_names() %>% 
+  glimpse()
+```
+
+### DHDS responses
+
+```{r}
+dhds_st %>% 
+  distinct(response)
+```
+
+# helpers
+
+## get county data from PLACES
+
+```{r}
+get_vx_county <- function(df, vnum, var_adj, var_ci, df_fips_cnty = df_county_fips){
+  
+  vx_county_raw <- df %>% 
+    select(state_abbr, county_name, county_fips,
+           {{ var_adj }}, {{ var_ci }})
+  
+  vx_county_cleaned <- vx_county_raw %>% 
+    mutate({{ var_ci }} := str_remove_all({{ var_ci }}, "[\\(\\)]")) %>% 
+    separate({{ var_ci }}, c("vx_cilow", "vx_cihigh"), sep = ",") %>% 
+    rename(fipscode = county_fips, vx_rawvalue = {{ var_adj }}) %>% 
+    mutate(vx_rawvalue = vx_rawvalue / 100,
+           vx_cilow = as.numeric(vx_cilow) / 100,
+           vx_cihigh = as.numeric(vx_cihigh) / 100) %>% 
+    rename(!!(paste0(vnum, "_rawvalue")) := vx_rawvalue,
+           !!(paste0(vnum, "_cilow")) := vx_cilow,
+           !!(paste0(vnum, "_cihigh")) := vx_cihigh)
+  
+  vx_county <- df_fips_cnty %>%
+    left_join(vx_county_cleaned,
+              by = "fipscode") %>% 
+    select(-c(fipscode,state_abbr,county_name))
+  
+  return(vx_county)
+  
+}
+```
+
+## get state data from CDI
+
+```{r}
+get_vx_state_from_cdi <- function(df, vnum, qst, df_fips_st = df_state_fips){
+  data_st <- df %>% 
+    filter(question == qst) %>% 
+    select(state_abbr = location_abbr, 
+           !!(paste0(vnum, "_rawvalue")) := data_value, 
+           !!(paste0(vnum, "_cilow")) := low_confidence_limit, 
+           !!(paste0(vnum, "_cihigh")) := high_confidence_limit
+           )
+  
+  vx_st <- df_fips_st %>% 
+    left_join(data_st, by = "state_abbr") %>% 
+    select(-c(state_abbr)) %>% 
+    mutate_if(is.numeric, list(~ . / 100))
+  
+  return(vx_st)
+
+}
+
+```
+
+## get state data from DHDS
+
+```{r}
+get_state_from_dhds <- function(df, vnum, dis_response, df_fips_st = df_state_fips){
+  data_st <- df %>% 
+    rename(state_abbr = location_abbr) %>% 
+    filter(state_abbr %in% c(state.abb, "US", "DC")) %>%
+    filter(response == dis_response) %>% 
+    select(state_abbr, 
+           !!(paste0(vnum, "_rawvalue")) := data_value, 
+           !!(paste0(vnum, "_cilow")) := low_confidence_limit, 
+           !!(paste0(vnum, "_cihigh")) := high_confidence_limit
+           ) 
+  
+  vx_st <- df_fips_st %>% 
+    left_join(data_st, by = "state_abbr") %>% 
+    select(-c(state_abbr)) %>% 
+    mutate_if(is.numeric, list(~ . / 100))
+  
+  return(vx_st)
+
+}
+
+```
+
+## add flag_CT
+
+- This function adds a flag to the data frame for Connecticut counties.
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+```
+
+# v011 Adult obesity
+
+## process data
+
+```{r}
+v011 <-
+  bind_rows(
+    # county data
+    get_vx_county(
+      df = places_brfss_county,
+      vnum = "v011",
+      var_adj = obesity_adj_prev,
+      var_ci = obesity_adj95ci
+    ),
+    # state data
+    get_vx_state_from_cdi(
+      df = us_cdi_st,
+      vnum = "v011",
+      qst = "Obesity among adults"
+    )
+  ) %>%
+  arrange(statecode, countycode) %>%
+  add_flag_CT(vnum = "v011", old = "U", new = "A") %>%
+  glimpse()
+```
+
+##  save data
+
+```{r}
+write_csv(v011,
+          paste0("../measure_datasets/", "v011", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+
+# v060 Diabetes prevalence 
+
+## process data
+
+```{r}
+v060 <- bind_rows(
+  # county data
+  get_vx_county(
+    df = places_brfss_county,
+    vnum = "v060",
+    var_adj = diabetes_adj_prev,
+    var_ci = diabetes_adj95ci
+  ),
+  # state data
+  get_vx_state_from_cdi(
+    df = us_cdi_st,
+    vnum = "v060",
+    qst = "Diabetes among adults"
+  )
+) %>%
+  arrange(statecode, countycode) %>%
+  add_flag_CT(vnum = "v060", old = "U", new = "A") %>%
+  glimpse()
+```
+
+##  save data
+
+```{r}
+write_csv(v060,
+          paste0("../measure_datasets/", "v060", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+
+# v070 Physical inactivity
+
+## process data
+
+```{r}
+v070 <-
+  bind_rows(
+    get_vx_county(
+      df = places_brfss_county,
+      vnum = "v070",
+      var_adj = lpa_adj_prev,
+      var_ci = lpa_adj95ci
+    ),
+    get_vx_state_from_cdi(
+      df = us_cdi_st,
+      vnum = "v070",
+      qst = "No leisure-time physical activity among adults"
+    )
+  ) %>%
+  arrange(statecode, countycode) %>%
+  add_flag_CT(vnum = "v070", old = "U", new = "A") %>%
+  glimpse()
+```
+
+##  save data
+
+```{r}
+write_csv(v070,
+          paste0("../measure_datasets/", "v070", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
+# v180 % Disability: Functional Limitations (new measure in 2025)
+
+## process data
+
+```{r}
+v180 <-
+  bind_rows(
+    get_vx_county(
+      df = places_brfss_county,
+      vnum = "v180",
+      var_adj = disability_adj_prev,
+      var_ci = disability_adj95ci
+    ),
+    get_state_from_dhds(
+      df = dhds_st,
+      vnum = "v180",
+      dis_response = "Any Disability"
+    )
+  ) %>%
+  arrange(statecode, countycode) %>%
+  add_flag_CT(vnum = "v180", old = "U", new = "A") %>%
+  glimpse()
+```
+
+##  save data
+
+```{r}
+write_csv(v180,
+          paste0("../measure_datasets/", "v180", "_r2025",
+                 ".csv"),
+          na = "")
+```

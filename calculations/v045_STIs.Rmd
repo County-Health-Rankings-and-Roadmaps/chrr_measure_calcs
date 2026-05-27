@@ -1,0 +1,252 @@
+---
+title: "v045 Sexually Transmitted Infections - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+- Description
+The numerator is the number of reported chlamydia cases in a county.
+
+- What is the numerator?
+Number of reported cases of chlamydia
+
+- What is the denominator?
+Total population
+
+
+## Raw data access
+
+Website to downloaded data 
+https://gis.cdc.gov/grasp/nchhstpatlas/main.html?value=atlas
+
+
+Online documentation 
+https://gis.cdc.gov/grasp/nchhstpatlas/main.html?value=atlas
+
+## from Technical notes:
+
+STD
+>In 2022, Connecticut adopted nine planning regions as county-equivalent geographic units; as STI case notification data were not available in the new county-equivalent units for 2022, county-level data for Connecticut have been suppressed. 
+
+-   Denominator (population): not available for downloading this year
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r}
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+# import raw data
+
+- The header in the raw data is at line 8. 
+- `readr::read_csv(..., skip =7)` did not work, so I used `data.table::fread` instead.
+- `read.csv(..., skip =7)` also works.
+
+```{r}
+raw_dir <- "../raw_data/NCHHSTP"
+
+# county-level data
+v045_cnt <- data.table::fread(file.path(raw_dir, "AtlasPlusTableData_v045_county.csv"),
+                       skip = 7) %>% 
+  janitor::clean_names() %>% 
+  select(fips, 
+         numerator = cases, 
+         rawvalue = rate_per_100000)
+
+v045_st <- data.table::fread(file.path(raw_dir, "AtlasPlusTableData_v045_state.csv"),
+                       skip = 7) %>% 
+  janitor::clean_names() %>% 
+  select(statecode = fips, 
+         numerator = cases, 
+         rawvalue = rate_per_100000) 
+
+v045_us <- data.table::fread(file.path(raw_dir, "AtlasPlusTableData_v045_national.csv"),
+                       skip = 7) %>% 
+  janitor::clean_names() %>% 
+  select(numerator = cases, 
+         rawvalue = rate_per_100000) 
+
+```
+
+# county data
+
+```{r}
+v045_cnt_2 <- v045_cnt %>% 
+  mutate(fips = str_pad(fips, 5, "left", "0")) %>% 
+  arrange(fips) %>%
+  mutate(statecode = str_sub(fips, start = 1L, end = 2L),
+         countycode = str_sub(fips, start = 3L, end = 5L),
+         .before = "fips") %>% 
+  select(-fips) %>% 
+  filter(statecode  != "72") %>% 
+  glimpse()
+```
+
+## check AK
+
+AK: 261, 063 and 066 are in the data set; 
+
+need to remove 02261 for 2025 rankings
+
+```{r}
+v045_cnt %>% 
+  filter(fips %in% c(2063, 2066, 2261) )
+```
+
+## check CT counties: old FIPS codes, but suppressed
+
+```{r}
+v045_cnt %>% 
+  filter(str_detect(fips, "^9") )
+```
+
+## standard county fips
+
+```{r}
+v045_cnt_3 <- fips %>% 
+  filter(countycode != "000") %>% 
+  select(statecode, countycode) %>% 
+  left_join(v045_cnt_2, by = c("statecode", "countycode"))  %>% 
+  mutate_at(c("numerator",
+              "rawvalue"), readr::parse_number)
+
+v045_cnt_3
+```
+
+# state data
+
+```{r}
+v045_st_1 <- v045_st %>% 
+  mutate(statecode = str_pad(statecode, 2, "left", "0")) %>% 
+  mutate(countycode = "000", .after = "statecode") %>% 
+  mutate(numerator = readr::parse_number(numerator)) %>% 
+  arrange(statecode)
+
+v045_st_1
+
+```
+
+# us data
+
+```{r}
+v045_us_1 <- v045_us %>% 
+  mutate(statecode = "00", countycode = "000", .before = "numerator") %>% 
+  mutate(numerator = readr::parse_number(numerator))
+
+v045_us_1
+```
+
+# combine county, state, us data
+
+```{r}
+v045_all <- bind_rows(v045_cnt_3, v045_st_1, v045_us_1) %>% 
+  arrange(statecode, countycode) 
+
+v045_all
+```
+
+# suppression
+
+applying suppression criteria for fewer than 4 cases, but keeping 0 cases
+
+```{r}
+v045_all_1 <- v045_all %>% 
+  mutate(numerator = if_else(numerator>0 & numerator<4, NA_real_, numerator),
+         rawvalue = if_else(is.na(numerator), NA_real_, rawvalue)) %>% 
+  glimpse()
+
+```
+
+# column names
+
+```{r}
+v045_all_2 <- v045_all_1 %>% 
+  rename(v045_numerator = numerator, 
+         v045_rawvalue = rawvalue ) %>% 
+  mutate(v045_denominator = NA_real_,
+         v045_cilow = NA_real_, v045_cihigh = NA_real_, v045_sourceflag = NA_real_)
+
+v045_all_2
+```
+
+# standardize fips
+
+```{r}
+v045_all_3 <- fips %>% 
+  select(statecode, countycode) %>% 
+  left_join(v045_all_2, by = c("statecode", "countycode"))
+
+v045_all_3
+```
+
+# add flag_CT
+
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+v045 <- v045_all_3 %>% 
+  add_flag_CT(vnum = "v045", old="U", new = "U")
+
+v045
+```
+
+# suppression per verification
+
+per verification: "There is also one big potential outlier of county 48389 (highlighted in blue). The rate increased from 1029 to 4277, with a numerator increase from 149 to 552 (the previous years’ rates had been 432 and 463 in 2023 and 2022, respectively)"
+
+```{r}
+v045 <- v045 %>% 
+  mutate(across(c(v045_numerator, v045_rawvalue), ~if_else(statecode=="48" & countycode=="389", NA, .)))
+
+v045
+```
+
+# save data
+
+```{r}
+write_csv(v045,
+          paste0("../measure_datasets/", "v045", "_r2025",
+                 ".csv"),
+          na = "")
+
+```
+

@@ -1,0 +1,155 @@
+---
+title: "v153 homeownership"
+author: "how"
+format: html
+editor: visual
+---
+
+# about
+
+## Basic information
+
+Description: Percentage of owner-occupied housing units.
+
+Numerator: The numerator is the total number of owner-occupied housing units in a county.
+
+Denominator: The denominator is the total occupied housing units in a county.
+
+## Raw data access
+
+Data Source: American Community Survey, five-year estimates, table B25003
+
+Data Download Link: <https://data.census.gov/table/ACSDT5Y2023.B25003?q=B25003>
+
+For our calculations we use the tidycensus package to quickly pull ACS data into R.
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+library(tidycensus)
+library(here)
+```
+
+# standard county and state fips
+
+-   The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+
+```{r }
+fips <-  bind_rows(
+  read_sas(here("inputs/county_fips_with_ct_old.sas7bdat")),
+  read_sas(here( "inputs/state_fips.sas7bdat"))) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+```{r pull in the data using the tidycensus package}
+
+# Variables
+vars <- c(
+  "B25003_001E", # Total
+  "B25003_002E", # Owner-occupied
+  "B25003_001M", # Total MOE
+  "B25003_002M"  # Owner MOE
+)
+
+# County-level data
+county_data <- tidycensus::get_acs(
+  geography = "county",
+  variables = vars,
+  year = 2023,
+  survey = "acs5",
+  output = "wide"
+)
+
+# State-level data
+state_data <- get_acs(
+  geography = "state",
+  variables = vars,
+  year = 2023,
+  survey = "acs5",
+  output = "wide"
+)
+
+
+# National-level data
+us_data <- get_acs(
+  geography = "us",
+  variables = vars,
+  year = 2023,
+  survey = "acs5",
+  output = "wide"
+) %>%
+  mutate(geography_type = "us")
+
+#fix the GEOID in the state_data and us_data to match the format of the county_data GEOID
+state_data1 = state_data %>% mutate(GEOID = paste0(GEOID, "000"))
+us_data1 = us_data %>% mutate(GEOID = "00000")
+
+# Combine both
+totraw <- bind_rows(county_data, state_data1, us_data1)
+# At this point, `totraw` has:
+# GEOID, NAME, B25003_001E, B25003_001M, B25003_002E, B25003_002M
+
+
+
+
+```
+
+```{r basic calculations}
+
+
+
+# Add derived columns
+totraw1 <- totraw %>%
+  mutate(
+    fipscode = GEOID,
+    statecode = substr(fipscode, 1, 2),
+    countycode = substr(fipscode, 3, 5)
+  )
+
+totraw1 = totraw1 %>% mutate(
+  v153_numerator = B25003_002E, 
+  v153_denominator = B25003_001E,
+  v153_rawvalue = v153_numerator / v153_denominator, 
+  se = ifelse(v153_rawvalue == 1, 
+              (B25003_002M/1.645) / v153_denominator, 
+              ifelse((B25003_002M/1.645) ^2 - (v153_rawvalue^2 * (B25003_001M/1.645) ^2) >=0,
+                     (1/v153_denominator) * (sqrt((B25003_002M/1.645)^2 - (v153_rawvalue^2 * (B25003_001M/1.645) ^2))),
+                     (1/v153_denominator) * (sqrt((B25003_002M/1.645)^2 + (v153_rawvalue^2 * (B25003_001M/1.645) ^2))))
+))
+
+
+totraw2 = totraw1 %>% mutate(
+  v153_cilow = ifelse(v153_rawvalue - (1.96* se) <0, 0, v153_rawvalue - (1.96 * se)),
+  v153_cihigh = ifelse(v153_rawvalue + (1.96* se) > 1, 1, v153_rawvalue + (1.96 * se))
+)
+totraw2 = totraw2 %>% mutate(
+  v153_cilow = ifelse(v153_rawvalue - 1.96* se <0 & v153_rawvalue + 1.96* se>1, NA, pmax(v153_rawvalue - 1.96 * se, 0)),
+  v153_cihigh = ifelse(v153_rawvalue- 1.96* se <0 & v153_rawvalue+ 1.96* se>1, NA, pmin(v153_rawvalue + 1.96 * se, 1)),
+)
+
+```
+
+```{r add in fipscodes}
+all = merge(fips, totraw2, by= c("statecode", "countycode"), all.x = TRUE)
+
+#get rid of excess cols 
+all = all %>% select(statecode, countycode, v153_cihigh, v153_cilow, v153_numerator, v153_denominator, v153_rawvalue)
+
+```
+
+
+
+```{r compare }
+compare("v153", all, 2025)
+initial <- read_sas(paste0("P:/CH-Ranking/Data/", 2025, "/3 Data calculated needs checking/", "v153", ".sas7bdat"))
+  
+
+```
+
+```{r save data}
+save_data(all, "v153")
+```

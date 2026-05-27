@@ -1,0 +1,456 @@
+---
+title: "NCHS v147 Life Expectancy (LE) - R2026"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+- Description
+Average number of years people are expected to live.
+
+## Raw data access
+
+- NCHS mortality and natality data 2021-2023: the data is requested
+
+- Census population estimates 2021-2023 from:
+
+2021 Census Population Estimates: https://www2.census.gov/programs-surveys/popest/datasets/2020-2021/counties/asrh/cc-est2021-all.csv
+
+2022 Census Population Estimates: https://www2.census.gov/programs-surveys/popest/datasets/2020-2022/counties/asrh/cc-est2022-all.csv
+
+2023 Census Population Estimates: https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/asrh/cc-est2023-alldata.csv
+
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+```
+
+# set up directory
+
+```{r}
+# set up directory that holds data needed for calculations
+# NCHS mortality data, not allowed to share in GitHub
+nchs_mort_dir <- "D:/CHRR/mortality raw"
+
+# NCHS natality data, not allowed to share in GitHub
+nchs_nata_dir <- "D:/CHRR/natality raw"
+
+# Census county population estimates data
+census_pop_dir <- "D:/CHRR/pop raw"
+```
+
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat"),
+  read_sas( "../inputs/state_fips.sas7bdat")) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# helpers
+
+## functions used commonly by NCHS measures
+
+- some commonly used functions are in a separate file, `nchs_measure_helpers.R`. 
+```{r}
+source("../scripts/nchs_measure_helpers.R")
+```
+
+## function: process pop data for v147
+
+```{r}
+process_pop_v147 <- function(year, by_race_TF = FALSE){
+  pop <- read_census_pop(file_name = get_census_csv_file_info(year)$file_name ) %>% 
+    get_census_pop_by_agecat_race(get_census_csv_file_info(year)$year_num, by_race = by_race_TF, age_cat_version = "v147")
+  
+  return(pop)
+}
+```
+
+## function: process mort data for v147
+
+```{r}
+process_mort_v147 <- function(year, by_race_TF = FALSE){
+  
+  print(get_mort_file_name(year))
+  
+  mort <- read_mort_data(
+    file_path = file.path(nchs_mort_dir, get_mort_file_name(year) ), 
+    header = mort_header,
+    n_max = Inf) %>% 
+    get_mort_data_by_agecat_race(df_fips=fips, by_race = by_race_TF, age_cat_version = "v147")
+  
+  return(mort)
+}
+
+```
+
+# Pop data
+
+## NCHS birth data: age_cat = 0
+
+- Use births data to approximate infant population (age_cat = 0), as Census county-level population estimates use 5-year age groups and do not have age_cat = 0.
+
+- The NCHS birth data was aggregated by state, county, age category, and race/ethnicity group.
+
+```{r}
+yrs <- c(2021:2023)
+
+infant_pop <- 
+  get_infant_pop(
+    yrs, 
+    file.path(nchs_nata_dir, "nchs_births_2017_2023.csv"), 
+    by_race = FALSE) %>% 
+  glimpse()
+
+infant_pop
+```
+
+## Census pop data 2021-2023 by age_cat 1-18 
+
+```{r}
+pop_agecat_1_18 <- bind_rows(
+  process_pop_v147(2021),
+  process_pop_v147(2022) %>% 
+    fix_CT_pop(process_pop_v147(2021)),
+  process_pop_v147(2023) %>% 
+    fix_CT_pop(process_pop_v147(2021))
+  ) %>% 
+  group_by(statecode, countycode, age_cat) %>% 
+  summarise(pop = sum(pop, na.rm = TRUE), .groups = "drop") %>% 
+  glimpse()
+
+```
+
+
+## combine age cat 0 with age cat 1-18
+
+```{r}
+pop_all <- 
+  bind_rows(
+    # age_cat = 2 to 18
+    pop_agecat_1_18 %>% filter(age_cat!=1),
+    
+    # age_cat = 0
+    fips %>% 
+      select(1:2) %>% 
+      left_join(infant_pop, by = c('statecode', 'countycode')) %>% 
+      mutate(pop = if_else(is.na(pop), 0, pop)) %>% 
+      mutate(age_cat = 0),
+    
+    # fixed age_cat = 1
+    pop_agecat_1_18 %>% 
+      filter(age_cat==1) %>% 
+      bind_rows(infant_pop) %>% 
+      pivot_wider(names_from = age_cat, values_from = pop, names_glue = "pop_{age_cat}") %>% 
+      mutate(pop = if_else(is.na(pop_0), pop_1, pop_1 - pop_0)) %>% 
+      select(-c(pop_0, pop_1)) %>% 
+      mutate(age_cat = 1)
+    ) %>% 
+    arrange(statecode, countycode, age_cat) %>% 
+  # remove 02261
+    filter(!(statecode == "02" & countycode == "261") ) 
+
+pop_all  
+```
+
+## pop <0 
+
+```{r}
+pop_all %>% 
+  filter(pop<0)
+```
+
+## set pop < 0 as 0
+
+```{r}
+pop_all <- pop_all %>% 
+  mutate(pop = if_else(pop<0, 0, pop))
+
+```
+
+
+# mort data
+
+## header
+
+```{r}
+mort_header <- tribble(
+  ~fld_name, ~start,  ~end,
+  "state_of_residence", 29,  30,
+  "county_of_residence", 35,  37,
+  "detail_age", 70, 73,
+)
+```
+
+
+## mort 2021-2023
+
+```{r}
+mort_all <- bind_rows(
+  process_mort_v147(2021),
+  process_mort_v147(2022),
+  process_mort_v147(2023)
+  ) %>% 
+  group_by(statecode, countycode, age_cat) %>% 
+  summarise(deaths = sum(deaths), .groups = "drop") %>% 
+  glimpse()
+
+```
+
+# Life Expectancy (LE) CALCULATION 
+
+## merge mort and pop data
+
+```{r}
+merged <- pop_all %>% 
+  left_join(mort_all, 
+            by = c("statecode", "countycode", "age_cat")) %>% 
+  # replace NA with 0 for deaths
+  mutate(deaths = if_else(is.na(deaths), 0, deaths)) %>% 
+  glimpse()
+
+```
+
+## LE table
+
+-   $x_i$ : Age at Start of Interval (Years)
+
+-   age_interval: Age Interval (Years) 	
+
+-   $n_i$ : Interval Width (Years)
+
+-   $a_i$: Average proportion of age interval lived for those who die	
+
+-   $deaths_i$ :Number Of Deaths In Interval 
+
+-   $pop_i$ : Population Years At Risk 
+
+-   $m_i$  : Death Rate In Age Interval
+
+$$m_i = \frac{death_i}{pop_i}$$
+
+-   $q_i$  : Probability Of Dying In Interval	
+
+$$q_i = \frac{n_i\cdot{ m_i}}{1+(1-a_i)\cdot n_i\cdot m_i}$$
+
+Ref: Chin Long Chiang, On Constructing Current Life Tables, Journal of the American Statistical Association, 1972
+
+
+-   $p_i$  : Probability of Surviving the Interval
+
+$$p_i = 1-q_i$$
+
+```{r}
+helper_tbl <- tibble::tribble(
+  ~age_cat, ~age_interval,  ~n_i,    ~a_i,  
+   0L,        "0",        1L,   0.1,
+   1L,      "1-4",        4L,   0.5,
+   2L,      "5-9",        5L,   0.5,
+   3L,    "10-14",        5L,   0.5,
+   4L,    "15-19",        5L,   0.5,
+   5L,    "20-24",        5L,   0.5,
+   6L,    "25-29",        5L,   0.5,
+   7L,    "30-34",        5L,   0.5,
+   8L,    "35-39",        5L,   0.5,
+   9L,    "40-44",        5L,   0.5,
+  10L,    "45-49",        5L,   0.5,
+  11L,    "50-54",        5L,   0.5,
+  12L,    "55-59",        5L,   0.5,
+  13L,    "60-64",        5L,   0.5,
+  14L,    "65-69",        5L,   0.5,
+  15L,    "70-74",        5L,   0.5,
+  16L,    "75-79",        5L,   0.5,
+  17L,    "80-84",        5L,   0.5,
+  18L,      "85+",        NA,   0.5,
+  )
+```
+
+
+```{r}
+le_table <- merged %>% 
+  rename(deaths_i = deaths, pop_i = pop) %>% 
+  left_join(helper_tbl, by = "age_cat") %>% 
+  group_by(statecode, countycode) %>% 
+  # calculate rates
+  mutate(m_i = deaths_i/pop_i,
+         q_i = n_i * m_i / (1 + (1 - a_i) * n_i * m_i),
+         p_i = 1 - q_i
+    ) %>%  
+  mutate(
+    q_i = if_else(age_cat == 18, 1, q_i), # fix for xi = 85
+    p_i = if_else(age_cat == 18, 0, p_i)  # fix for xi = 85
+  ) %>% 
+  # Hypothetical Life Table Cohort
+  mutate(l_i = accumulate(q_i, ~ .x * (1 - .y), .init = 100000)[-length(q_i)-1],
+         d_i = q_i*l_i,
+         L_i = (l_i-d_i)*n_i + (d_i * n_i * a_i))  %>%  
+  mutate(L_i = if_else(age_cat == 18, l_i/m_i, L_i)) %>% # fix for xi = 85
+  mutate(T_i = rev(cumsum(rev(L_i)))) %>%  # reverse cumsum
+  mutate(e_i = T_i / l_i)
+
+le_table
+```
+
+## calculate variance and confidence interval
+
+-   Calculate var(qi) = (qi2*(1-qi))/Deaths, var(qi) = 0 where Deaths=0
+
+    *   the (binomial) variance of the survival probability 𝑝𝑥 for the 𝑥𝑡ℎ age interval.
+
+$When\space death_i\neq 0$
+
+$$var(q_i)=\frac{q_i^2\cdot(1-q_i)}{death_i}$$
+
+$When\space death_i=0$
+
+$$var(q_i)=0$$
+
+-   Calculate v1 = li2*(((1-ai)*ni+ei+1)2)*var(qi)
+
+$$v1=l_i^2\cdot [(1-a_i)\cdot n_i + e_{i+1}]^2\cdot var(q_i)$$
+
+-   Calculate v2 = v1 + v2i+1, v2w=0
+
+$$v2_i = v1_i +v2_{i+1}$$
+v2: Reverse cumulative sum of v1
+
+-   Calculate var(ei) = v2/(li2)
+
+$$var(ei)=\frac{v2}{l_i^2}$$
+
+-   Calculate paw = lw/li
+
+$$paw=\frac{l_w}{l_i}$$
+
+-   Calculate term_adj = paw2/(Mw3*Populationw)
+
+$$ term_{adj} = \frac{paw^2}{M_w^3\cdot Population_w^2}$$
+
+-   Calculate var_adj = var(ei)+term_adj
+
+$$var\_adj = var(e_i)+term_{adj}$$
+
+-   Calculate standard error SE(ei) = sqrt(var_adj)
+
+$$SE(e_i)=\sqrt {var\_adj}$$
+
+-   Calculate CILL and CIUL = ei(+ or -)1.96*SE(ei) 
+
+$$ CILL\space or\space CIUL=e_i \pm SE(e_i) $$
+
+```{r}
+le_table_var <- le_table %>% 
+  group_by(statecode, countycode) %>%
+  mutate(var_qi = case_when(
+    deaths_i == 0 ~ 0,
+    deaths_i != 0 ~ q_i^2 * (1 - q_i)/deaths_i
+  )) %>% 
+  mutate(e_i_lead = lead(e_i)) %>% #"next" (lead()) values in e_i; (e_i+1, or move one row up)
+  mutate(v1 = l_i^2 * ((1-a_i)*n_i+e_i_lead)^2 * var_qi) %>% 
+  select(-e_i_lead) %>% # remove column e_i_lead
+  mutate(v2 = rev(cumsum(rev(replace_na(v1, 0))))) %>% 
+  mutate(var_ei = v2 / l_i^2) %>% 
+  mutate(paw = l_i[length(l_i)]/l_i) %>% 
+  mutate(term_adj = paw^2 / (m_i[length(m_i)]^3 * pop_i[length(pop_i)])) %>% 
+  mutate(var_adj = var_ei + term_adj) %>% 
+  mutate(se = sqrt(var_adj),
+         ci = se * 1.96,
+         ci_lo = e_i - ci,
+         ci_hi = e_i + ci) %>% 
+  ungroup()
+
+le_table_var
+```
+
+
+## LE from birth
+
+```{r}
+v147 <- le_table_var %>% 
+  filter(age_cat == 0) %>% 
+  select(statecode, countycode, v147_rawvalue = e_i, v147_cilow = ci_lo, v147_cihigh = ci_hi)
+
+v147  
+```
+
+```{r}
+summary(v147)
+
+v147 %>% 
+  filter(is.infinite(v147_rawvalue))
+```
+
+
+## suppression
+
+-   suppression for counties with pop < 5000
+
+-   suppression 02261??
+
+- County 02013: LE = 146.4, suppressed per verification
+
+```{r}
+le_suppress <- le_table %>% 
+  select(statecode, countycode, pop_i) %>% 
+  group_by(statecode, countycode) %>% 
+  summarise(pop = sum(pop_i, na.rm = TRUE), .groups = "drop") %>% 
+  mutate(suppress = if_else(pop<5000, 1, 0)) 
+
+le_suppress
+```
+
+```{r}
+v147_2 <- v147 %>% 
+  left_join(le_suppress %>% select(-pop),
+            by = c("statecode", "countycode")) %>% 
+  mutate(across(starts_with("v147"), ~if_else(suppress == 1, NA, .))) %>% 
+  # suppress 02013
+  mutate(across(starts_with("v147"), ~if_else(statecode == "02" & countycode == "013", NA, .))) %>% 
+  select(-suppress) %>% 
+  mutate(across(starts_with("v147"), ~if_else(is.infinite(.), NA, .))) %>% 
+  arrange(statecode, countycode)
+
+v147_2
+```
+
+```{r}
+summary(v147_2)
+```
+
+# add flag_CT
+
+- 'A' = data *available* for a CT county
+- 'U' = data *unavailable* for a CT county
+
+```{r}
+v147_3 <- v147_2 %>% 
+  add_flag_CT(vnum = "v147", old="A", new = "U")
+```
+
+# Compare to initial calculations 
+```{r}
+compare("v147", v147_3, year = 2026)
+```
+
+
+# save data
+```{r}
+save_data(v147_3, "v147")
+```
