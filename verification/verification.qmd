@@ -1,0 +1,38 @@
+---
+title: "Measure Dataset Verification"
+format: html
+execute:
+  echo: false
+---
+
+## Overview
+
+This report compares the newly submitted dataset to the prior year version.
+
+```{r}
+# placeholder: 
+current_file = "v023_r2025.csv"
+
+filename <- base::basename(current_file)
+
+match <- stringr::str_match(filename, "^v(\\d+)_r(\\d{4})\\.csv$")
+
+measurenum <- match[,2]
+year    <- as.integer(match[,3])
+
+prior_year <- year - 1
+
+prior_file = countyhealthR::get_chrr_measure_data(geography = "county", measure = as.numeric(measurenum))
+
+```
+
+
+---
+
+## 1. State-level summary
+
+## 2. County-level comparison
+
+## 3. Dataset summary statistics
+
+## 4. Year-over-year comparison plot
