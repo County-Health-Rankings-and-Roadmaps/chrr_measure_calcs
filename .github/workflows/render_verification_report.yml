@@ -31,4 +31,4 @@ jobs:
 
       - name: Render report
         run: |
-          quarto render verification.qmd --to html
+          quarto render verification/verification.qmd --to html
