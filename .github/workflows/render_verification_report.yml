@@ -48,9 +48,9 @@ jobs:
 
       - name: Prepare site
         run: |
-          mkdir _site
-          mv verification.html _site/index.html
-
+          mkdir -p _site
+          cp verification/verification.html _site/index.html
+          
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
