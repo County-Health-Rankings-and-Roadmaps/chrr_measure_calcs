@@ -11,28 +11,37 @@ format:
 ---
 
 
-Pilot the calculation of Homeownership (v153), Severe Housing Problems (v136), Some College (v069), High School Completion (v168), Residential Segregation – Black/White (v141), Disconnected Youth (v149), % Not Proficient in English (v059), Children in Single-Parent Households (v082), Driving Alone to Work (v067), Long Commute – Driving Alone (v137) 
+Pilot the calculation of Homeownership (v153), Severe Housing Problems (v136), Some College (v069), High School Completion (v168), Residential Segregation – Black/White (v141), Disconnected Youth (v149), % Not Proficient in English (v059), Children in Single-Parent Households (v082), Driving Alone to Work (v067), Long Commute – Driving Alone (v137)
+
+# References
+
+- [Links to ACS-5 data](https://www.census.gov/data/developers/data-sets/acs-5year.html)
+- [Annotation varaibles](https://www.census.gov/data/developers/data-sets/acs-1year/notes-on-acs-estimate-and-annotation-values.html)
 
 # Completion status
 
+Calculated measures from ACS 2023 are compared against previously calculated CHRR-2025 values.
+Old calculations did not apply "max variance" rule for zero-valued estimates.
+
 ##  % Not Proficient in English (v059)
-- Diff in CI, only NA vs 0/1?
+- Complete, numerically equal
 
 ## Driving Alone to Work (v067)
+- Base measure complete, numerically equal
 - Calc by race not implemented
 
 ## Some College (v069)
-- Diff in CI, only NA vs 0/1?
+- Complete, numerically equal
 
 ## Children in Single-Parent Households (v082)
-- Complete, numerically equal without zero-max rule
+- Complete, numerically equal
 
 ## Severe Housing Problems (v136)
 - TODO from scripts/v136_severe_housing_problems.Rmd
 - Uses data from HUD, skipping for now.
 
 ## Long Commute – Driving Alone (v137)
-- Complete, numerically equal without zero-max rule.
+- Complete, numerically equal
 - No ratio calculation, proportions already in raw data.
 - Wrong denominator value in source code (`denominator = S0802_C01_001E`, total)? Should be `S0802_C02_001E`, drove alone.
 
@@ -42,14 +51,14 @@ Pilot the calculation of Homeownership (v153), Severe Housing Problems (v136), S
 - Aggregation to counties from tracts
 
 ## Disconnected Youth (v149)
-- Complete, numerically equal without zero-max rule
+- Complete, numerically equal
 - Special case handling, maybe include in general function?
 
 ## Homeownership (v153)
 - Complete, numerically equal
 
 ## High School Completion (v168)
-- Diff in CI, only NA vs 0/1?
+- Complete, numerically equal
 
 
 # Libraries
@@ -70,7 +79,7 @@ ACS_YEAR <- 2023
 
 ```{r}
 
-x <- get_raw_table(2023, "B15001")
+x <- get_raw_table(ACS_YEAR, "B15001")
 
 x %>% head()
 
@@ -91,14 +100,17 @@ The denominator is the total county population aged 5 and over.
 
 
 ```{r}
+tabid <- "B16005"
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid))
 
 numerator <- expr(B16005_007E + B16005_012E + B16005_008E + B16005_013E + B16005_017E + B16005_022E + B16005_018E + B16005_023E + B16005_029E + B16005_030E + B16005_034E + B16005_035E + B16005_039E + B16005_040E + B16005_044E + B16005_045E)
 denominator <- expr(B16005_001E)
 
-x <- get_raw_table(2023, "B16005") %>%
+x <- get_raw_table(ACS_YEAR, tabid) %>%
   standardize_fips() %>% 
   add_flag_CT() %>%
-  calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, zero_max = FALSE) %>%
+  # calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, zero_max = FALSE) %>%
+  calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator) %>%
   apply_suppression() %>%
   mutate(sourceflag = NA) %>%
   add_col_prefix("v059") %>%
@@ -125,11 +137,13 @@ denominator	= total workforce
 raw_value	= Percentage of workers who drive alone to work
 
 ```{r}
+tabid <- "B08301"
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid))
 
 numerator <- expr(B08301_003E)
 denominator <- expr(B08301_001E)
 
-x <- get_raw_table(2023, "B08301") %>%
+x <- get_raw_table(ACS_YEAR, tabid) %>%
   standardize_fips() %>% 
   add_flag_CT() %>%
   calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator) %>%
@@ -178,13 +192,15 @@ denominator	= Total number of individuals ages 25-44.
 raw_value	= Percentage of adults age 25-44 with some post-secondary education
 
 ```{r}
+tabid <- "B15001"
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid))
 
 numerator <- expr(B15001_015E + B15001_016E + B15001_017E + B15001_018E + B15001_023E + 
         B15001_024E + B15001_025E + B15001_026E + B15001_056E + B15001_057E + B15001_058E +  
         B15001_059E + B15001_064E + B15001_065E + B15001_066E + B15001_067E)
 denominator <- expr(B15001_011E + B15001_019E + B15001_052E + B15001_060E)
 
-x <- get_raw_table(2023, "B15001") %>%
+x <- get_raw_table(ACS_YEAR, tabid) %>%
   standardize_fips() %>% 
   add_flag_CT() %>%
   calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, zero_max = FALSE) %>%
@@ -222,7 +238,7 @@ numerator <- expr(B15001_015E + B15001_016E + B15001_017E + B15001_018E + B15001
         B15001_059E + B15001_064E + B15001_065E + B15001_066E + B15001_067E)
 denominator <- expr(B15001_011E + B15001_019E + B15001_052E + B15001_060E)
 
-x1 <- get_raw_table(2023, "B15001") %>%
+x1 <- get_raw_table(ACS_YEAR, "B15001") %>%
   standardize_fips() %>% 
   calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, zero_max = FALSE)
 
@@ -255,9 +271,6 @@ x1e <- x1 %>%
 
 ```
 
-```{r}
-
-```
 
 
 # v082 - SINGLE-PARENT HOUSEHOLDS
@@ -272,7 +285,7 @@ raw_value	= Percentage of children that live in single-parent households
 numerator <- expr(B09005_004E + B09005_005E)
 denominator <- expr(B09005_001E)
 
-x <- get_raw_table(2023, "B09005") %>%
+x <- get_raw_table(ACS_YEAR, "B09005") %>%
   standardize_fips() %>% 
   add_flag_CT() %>%
   calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator) %>%
@@ -363,70 +376,35 @@ waldo::compare(x1, v137, tolerance = 1e-4, list_as_map = TRUE)
 
 
 
-## var list
-```{r}
-
-```
-
-## process data
-```{r}
-longcommute <- acs5 %>% 
-  select(1:3, all_of(var_ls_137)) %>% 
-  rename(denominator = S0802_C01_001E) %>% 
-  glimpse()
-
-longcommute_2 <- longcommute %>% 
-  mutate(
-    numerator = NA_real_,
-    rawvalue = S0802_C02_086E + S0802_C02_087E + S0802_C02_088E + 
-           S0802_C02_089E,
-    se = (sqrt(S0802_C02_086M**2 + S0802_C02_087M**2 + S0802_C02_088M**2 +
-                    S0802_C02_089M**2))*1.96/1.645
-       ) %>% 
-  mutate(cilow = rawvalue - se, 
-         cihigh = rawvalue + se,
-         sourceflag = NA_real_)
-
-standard_cols <- c('statecode', 'countycode', 'numerator', 'denominator',
-                   'rawvalue', 'cilow', 'cihigh', 'sourceflag')
-
-longcommute_3 <- longcommute_2 %>% 
-  select(all_of(standard_cols)) %>% 
-  mutate(across(c(rawvalue, cilow, cihigh), ~ .x/100) ) %>% 
-  glimpse()
-```
-
-## suppression + standardize column names
-
-```{r}
-longcommute_4 <- longcommute_3 %>%
-  apply_suppression() %>% 
-  # standard column names
-  standardize_col_names("v137") %>% 
-  glimpse()
-```
-
-## standardize fips and add flag_CT
-
-```{r}
-v137 <- longcommute_4 %>% 
-  standardize_fips() %>% 
-  add_flag_CT(vnum = "v137", old="U", new = "A")
-
-v137
-```
-
-## save 
-
-```{r}
-v137 %>% 
-  save_data("v137")
-```
-
-
 # v141 - Residential Segregation – Black/White
 - TODO from scripts/v141_residential_segregation.qmd
 
+
+
+```{r}
+tabid <- "B11002"
+
+
+vars <- c(
+  "B11002_001E",   # Total households
+  "B11002A_001E",  # White alone, not Hispanic
+  "B11002B_001E"   # Black or African American alone
+)
+
+x <- get_raw_table(ACS_YEAR, tabid)
+
+x %>%
+  select(!(ends_with("A") | ends_with("M")))
+
+```
+
+
+```{r}
+x1 <- read_csv("measure_datasets/v141_r2025.csv") %>%
+  arrange(statecode, countycode)
+
+x1
+```
 
 # v149 - DISCONNECTED YOUTH
 
@@ -441,7 +419,7 @@ numerator <- expr(B14005_010E + B14005_011E + B14005_014E + B14005_015E +
            B14005_024E + B14005_025E + B14005_028E + B14005_029E)
 denominator <- expr(B14005_001E)
 
-x <- get_raw_table(2023, "B14005") %>%
+x <- get_raw_table(ACS_YEAR, "B14005") %>%
   standardize_fips() %>% 
   add_flag_CT() %>%
   # calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, zero_max = FALSE) %>%
@@ -526,11 +504,13 @@ raw_value	= % Completed High School
 
 
 ```{r}
+tabid <- "S1501"
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid))
 
 numerator <- expr(S1501_C01_014E)
 denominator <- expr(S1501_C01_006E)
 
-x <- get_raw_table(2023, "S1501") %>%
+x <- get_raw_table(ACS_YEAR, tabid) %>%
   standardize_fips() %>% 
   add_flag_CT() %>%
   calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator) %>%
@@ -552,3 +532,67 @@ x1 <- read_csv("measure_datasets/v168_r2025.csv") %>%
 waldo::compare(x1, v168, tolerance = 1e-4, list_as_map = TRUE)
 
 ```
+
+
+# CHRR raw ACS-5
+
+```{r}
+chrr_acs5 <- read_csv("raw_data/ACS/acs_data_2019-2023.zip")%>% 
+  rename(fipscode = GEOID) %>% 
+  glimpse()
+```
+
+
+
+# Data diff
+
+Helper code to compare new computations with old CHRR results.
+
+```{r}
+numerator <- expr(S1501_C01_014E)
+denominator <- expr(S1501_C01_006E)
+chrr_path <- "measure_datasets/v168_r2025.csv"
+
+
+cmp_vars <- c("statecode", "countycode", "numerator", "denominator", "rawvalue", "cilow", "cihigh")
+x0 <- read_csv(chrr_path) %>%
+  arrange(statecode, countycode) %>%
+  rename_with(\(x) str_remove(x, "^v..._")) %>%
+  select(all_of(cmp_vars))
+
+x1 <- get_raw_table(ACS_YEAR, tabid) %>%
+  standardize_fips() %>% 
+  calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, zero_max = FALSE)
+
+cmp <- cmp_vars[-(1:2)] %>%
+  set_names() %>%
+  map(\(var) {
+    waldo::compare(x0[[var]], x1[[var]], tolerance = 1e-4)
+  })
+
+cmp
+
+
+almost_equal <- function(x, y, rel_tol = 0.001, abs_tol = Inf) {
+  abs_dif <- abs(x - y)
+  rel_dif <- ifelse(x == 0, 0, abs_dif / abs((x + y) / 2))
+  (is.na(x) & is.na(y)) | !is.na(x) & !is.na(y) & abs_dif <= abs_tol & rel_dif <= rel_tol
+}
+
+x <- full_join(
+  select(x0, statecode, countycode, v0 = cilow),
+  select(x1, statecode, countycode, v1 = cilow),
+  by = c("statecode", "countycode")
+) %>%
+  filter(!almost_equal(v0, v1))
+
+raw_vars <- base::union(all.vars(numerator), all.vars(denominator)) %>%
+  c(., map_chr(., \(xe) sub("E$", "M", xe)))
+
+x1e <- x1 %>%
+  right_join(x) %>%
+  select(all_of(raw_vars) | !starts_with(tabid))
+
+
+```
+

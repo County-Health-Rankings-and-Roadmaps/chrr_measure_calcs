@@ -166,25 +166,27 @@ calc_acs_ratio <- function(data, num_expr, den_expr, zero_max = TRUE) {
     # Identify corresponding MOE columns
     moe_vars <- str_replace(vars, "E$", "M")
     
-    # Extract as matrices for fast matrix math
-    V_mat <- (as.matrix(df[moe_vars]) / 1.645)^2
+    # Extract as matrices for fast matrix math, replacing special values with NA
+    V_mat <- as.matrix(df[moe_vars])
+    V_mat[V_mat %in% c(-555555555)] <- NA
+    V_mat <- (V_mat / 1.645)^2
 
     # No special treatment of zero estimate variances
     if (!zero_max) {
-      return(rowSums(V_mat, na.rm = TRUE))
+      return(rowSums(V_mat))
     }
 
     # Sum of variances where the estimate is NOT zero
     # (E_mat != 0) creates a matrix of TRUE/FALSE (1/0) to mask non-zeroes
     E_mat <- as.matrix(df[vars])
-    nonzero_sum <- rowSums(V_mat * (E_mat != 0), na.rm = TRUE)
+    nonzero_sum <- rowSums(V_mat * (E_mat != 0))
     
     # Max of variances where the estimate IS zero
     # Multiplying by (E_mat == 0) turns non-zero locations into 0 variance.
     zero_vars_mat <- V_mat * (E_mat == 0)
     
     # parallel maximum across matrix columns
-    zero_max <- exec(pmax, !!!as.data.frame(zero_vars_mat), na.rm = TRUE)
+    zero_max <- exec(pmax, !!!as.data.frame(zero_vars_mat))
     
     # Total variance per row
     return(nonzero_sum + zero_max)
