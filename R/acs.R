@@ -9,13 +9,15 @@ ipath <- list(
   state_fips = "inputs/state_fips.sas7bdat",
   acs5_api_vars_ = "https://api.census.gov/data/{year}/acs/acs5/{subject}variables.json",
   acs5_api_det_ = "https://api.census.gov/data/{year}/acs/acs5?get=group({tabid})&ucgid={ucgid}&key={key}",
-  acs5_api_sub_ = "https://api.census.gov/data/{year}/acs/acs5/subject?get=group({tabid})&ucgid={ucgid}&key={key}"
+  acs5_api_sub_ = "https://api.census.gov/data/{year}/acs/acs5/subject?get=group({tabid})&ucgid={ucgid}&key={key}",
+  chas_ = "https://www.huduser.gov/portal/datasets/cp/{years}-{geo}-csv.zip"
 )
 
 # output paths
 opath <- list(
   acs5_vars_ = "data/raw/acs5/{year}_vars_{tab_type}.pq",
-  acs5_table_ = "data/raw/acs5/{year}/{tabid}{tract}.pq"
+  acs5_table_ = "data/raw/acs5/{year}/{tabid}{tract}.pq",
+  chas_ = "data/raw/chas/{years}-{geo}-csv.zip"
 )
 
 #' URL to preview national table at data.census.gov
@@ -132,7 +134,13 @@ get_raw_table <- function(year, tabid, tract = FALSE) {
   df
 }
 
-
+#' Retrieve CHAS raw data table from a ZIP archive
+get_raw_chas <- function(year, geo = c("040", "050"), table) {
+  geo <- rlang::arg_match(geo)
+  years <- paste0(year - 4, "thru", year)
+  chas <- util$get_file(str_glue(opath$chas_), str_glue(ipath$chas_))
+  read_csv(unz(chas, str_glue("{geo}/{table}.csv")), show_col_types = FALSE)
+}
 
 
 #' Predifined list of state-county FIPS codes
@@ -183,7 +191,11 @@ add_flag_CT <- function(df, vnum, old = "U", new = "A") {
 }
 
 
-
+#' Calculate a derived ACS estimate along with MOEs
+#' Estimate needs to be of a ratio form (v1E + v2E + ...) / (v11E + v12E + ...)
+#' Numerator and denominator are passed as expressions
+#' MOE columns are identified from estimate column name stubs
+#' zero_max applies "maximum varience among zero estimates" Census recommendation to variance calculation
 calc_acs_ratio <- function(data, num_expr, den_expr, zero_max = TRUE) {
   # Capture the expressions as quosures
   num_enq <- enquo(num_expr)
@@ -270,15 +282,8 @@ apply_suppression <- function(df) {
     )
 }
 
+#' Prefix standard columns with "vXXX_"
 add_col_prefix <- function(df, col_prefix) {
-  df %>% 
-    rename(
-      !!(paste0(col_prefix, "_flag_CT")) := flag_CT,
-      !!(paste0(col_prefix, "_rawvalue")) := rawvalue, 
-      !!(paste0(col_prefix, "_numerator")) := numerator,
-      !!(paste0(col_prefix, "_denominator")) := denominator,
-      !!(paste0(col_prefix, "_cilow")) := cilow,
-      !!(paste0(col_prefix, "_cihigh")) := cihigh,
-      !!(paste0(col_prefix, "_sourceflag")) := sourceflag
-    )
+  cols_to_rename <- c("flag_CT", "rawvalue", "numerator", "denominator", "cilow", "cihigh", "sourceflag")
+  rename_with(df, \(col) paste0(col_prefix, "_", col), .cols = any_of(cols_to_rename))
 }

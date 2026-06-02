@@ -37,8 +37,9 @@ Old calculations did not apply "max variance" rule for zero-valued estimates.
 - Complete, numerically equal
 
 ## Severe Housing Problems (v136)
-- TODO from scripts/v136_severe_housing_problems.Rmd
-- Uses data from HUD, skipping for now.
+- Base variable complete, numerically equal except:
+  - CT, needs crosswalk from old to new via tracts
+  - FIPS 02164, CI NA?
 
 ## Long Commute – Driving Alone (v137)
 - Complete, numerically equal
@@ -47,7 +48,7 @@ Old calculations did not apply "max variance" rule for zero-valued estimates.
 
 ##  Residential Segregation – Black/White (v141)
 - Complete, numerically equal except:
-- US and 2 NY counties (Suffolk County 36103, Ulster County  36111)
+  - US and 2 NY counties (Suffolk County 36103, Ulster County  36111)
 
 ## Disconnected Youth (v149)
 - Complete, numerically equal
@@ -342,8 +343,73 @@ waldo::compare(x1, v082, tolerance = 1e-4, list_as_map = TRUE)
 
 # v136 - Severe Housing Problems
 
-TODO
+`utils::download.file()` fails to get the file, but returns a success result code (0).
+For now, manually download the file from "https://www.huduser.gov/portal/datasets/cp/2018thru2022-050-csv.zip" to "data/raw/chas/2018thru2022-050-csv.zip".
 
+Columns are similar to ACS columns, but are named differently.
+We rename them to ACS format here to reuse ratio and MOE calculation function.
+
+
+```{r}
+chas_year <- 2021
+numerator <- expr(T2_3E + T2_76E)
+denominator <- expr(T2_1E)
+
+
+x1 <- bind_rows(
+  get_raw_chas(chas_year, "050", "Table2"),
+  get_raw_chas(chas_year, "040", "Table2") %>% mutate(cnty = "000")
+) %>%
+  rename(ucgid = geoid) %>%
+  standardize_fips() %>%
+  filter(statecode != "00") %>%
+  add_flag_CT() %>%
+  rename_with(\(x) {
+    ifelse(substr(x, 4, 6) == "est", sub("est(.+)$", "\\1E", x), sub("moe(.+)$", "\\1M", x))
+  }, .cols = starts_with("T2_")) %>%
+  # calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator)
+  calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, zero_max = FALSE)
+
+# calc US aggregate from states
+x2 <- x1 %>%
+  filter(sumlevel == "040") %>%
+  summarize(
+    statecode = "00",
+    countycode = "000",
+    numerator = sum(numerator),
+    denominator = sum(denominator),
+    rawvalue = numerator / denominator
+  ) %>%
+  bind_rows(x1) %>%
+  arrange(statecode, countycode) %>%
+  apply_suppression() %>%
+  mutate(sourceflag = NA) %>%
+  add_col_prefix("v136")
+
+v136 <- x2 %>%
+  select(statecode, countycode, starts_with("v136"))
+
+
+```
+
+
+```{r}
+
+x0 <- read_csv("measure_datasets/v136_r2025.csv") %>%
+  arrange(statecode, countycode)
+
+waldo::compare(x0, v136, tolerance = 1e-4, list_as_map = TRUE)
+
+xcmp <- full_join(x0, v136, by = c("statecode", "countycode")) %>%
+  # known difference CT
+  filter(statecode != "09")
+
+x <- xcmp %>%
+  # filter(!util$almost_equal(v136_rawvalue.x, v136_rawvalue.y))
+  filter(!util$almost_equal(v136_cihigh.x, v136_cihigh.y))
+x
+
+```
 
 # v137 - LONG COMMUTE - DRIVING ALONE 
 

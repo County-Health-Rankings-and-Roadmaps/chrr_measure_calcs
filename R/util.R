@@ -25,7 +25,8 @@ get_file <- function(path, url) {
   download_status <- try(utils::download.file(url, path, mode = "wb"))
 
   # If download fails, try an alternative method
-  if (download_status != 0) {
+  # if (download_status != 0) { # download_status is not always reliable, can be 0 even if download filed
+  if (!file.exists(path)) {
     logger::log_warn("download failed, attempting alternative method... ", url)
     req <- httr2::request(url) |>
       httr2::req_headers(
