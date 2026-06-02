@@ -15,7 +15,7 @@ ipath <- list(
 # output paths
 opath <- list(
   acs5_vars_ = "data/raw/acs5/{year}_vars_{tab_type}.pq",
-  acs5_table_ = "data/raw/acs5/{year}/{tabid}.pq"
+  acs5_table_ = "data/raw/acs5/{year}/{tabid}{tract}.pq"
 )
 
 #' URL to preview national table at data.census.gov
@@ -62,15 +62,16 @@ get_raw_vars <- function(year, tab_type = c("B", "C", "S")) {
 
 #' Retrieve ACS-5 table from Census Data API
 #' US, state and county tables are downloaded in separate calls and combined into single dataframe
+#' Tracts can be optionally included by setting "tract = TRUE"
 #' Dataframes are cached to local parquet file for subsequent access
-get_raw_table <- function(year, tabid) {
+get_raw_table <- function(year, tabid, tract = FALSE) {
 
   tab_type <- substr(tabid, 1, 1)
   if (!(tab_type %in% c("B", "C", "S"))) {
     logger::log_error("Valid tables are details (B, C) and subject (S)")
   }
 
-  cache_path <- str_glue(opath$acs5_table_)
+  cache_path <- str_glue(opath$acs5_table_, tract = ifelse(tract, "_tract", ""))
   if (file.exists(cache_path)) {
     logger::log_info("Loading ACS-5 {year} table {tabid} from cache {cache_path}")
     return(arrow::read_parquet(cache_path))
@@ -83,12 +84,15 @@ get_raw_table <- function(year, tabid) {
   }
 
   # UCGID parameter specifications for US, all states and all counties
-  df <- list(
+  ucgid_sepc <- list(
     US = "0100000US",
     state = "pseudo(0100000US$0400000)",
     county = "pseudo(0100000US$0500000)"
-  ) |>
-    # perform API call for each UCGID and then combine results into single dataframe
+  )
+  if (tract) ucgid_sepc$tract <- "pseudo(0100000US$1400000)"
+
+  # perform API call for each UCGID and then combine results into single dataframe
+  df <- ucgid_sepc |>
     imap(\(ucgid, geo_type) {
       if (tab_type == "S") {
         url <- str_glue(ipath$acs5_api_sub_)
@@ -120,7 +124,7 @@ get_raw_table <- function(year, tabid) {
         # convert character values to double for numeric columns
         mutate(across(all_of(num_cols), readr::parse_double))
     }) |>
-    # combine US, state and column frames
+    # combine US, state, county and optional tract frames
     bind_rows()
   
   logger::log_info("Saving ACS-5 {year} table {tabid} to cache {cache_path}")
@@ -148,13 +152,13 @@ standardize_fips <- function(df) {
       geo_level = str_sub(ucgid, 1, 3),
       statecode = recode_values(
         geo_level,
-        "010" ~ "00", # US level
-        c("040", "050") ~ str_sub(ucgid, 10, 11) # state and county level
+        c("010") ~ "00", # US level
+        c("040", "050", "140") ~ str_sub(ucgid, 10, 11) # state and county level
       ),
       countycode = recode_values(
         geo_level,
         c("010", "040") ~ "000", # US and state level
-        c("040", "050") ~ str_sub(ucgid, 12, 14) # county level
+        c("050", "140") ~ str_sub(ucgid, 12, 14) # county level
       )
     ) %>%
     right_join(selected_fips, by = c("statecode", "countycode")) %>%

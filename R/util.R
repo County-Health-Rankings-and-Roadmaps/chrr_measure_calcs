@@ -41,3 +41,9 @@ get_file <- function(path, url) {
   }
 }
 
+#' Numerical comparison
+almost_equal <- function(x, y, rel_tol = 0.001, abs_tol = Inf) {
+  abs_dif <- abs(x - y)
+  rel_dif <- ifelse(x == 0, 0, abs_dif / abs((x + y) / 2))
+  (is.na(x) & is.na(y)) | !is.na(x) & !is.na(y) & abs_dif <= abs_tol & rel_dif <= rel_tol
+}

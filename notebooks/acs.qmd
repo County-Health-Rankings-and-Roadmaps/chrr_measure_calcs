@@ -46,9 +46,8 @@ Old calculations did not apply "max variance" rule for zero-valued estimates.
 - Wrong denominator value in source code (`denominator = S0802_C01_001E`, total)? Should be `S0802_C02_001E`, drove alone.
 
 ##  Residential Segregation – Black/White (v141)
-- TODO from scripts/v141_residential_segregation.qmd
-- Non-standard ACS, columns from three separate tables (Total, White and Black)
-- Aggregation to counties from tracts
+- Complete, numerically equal except:
+- US and 2 NY counties (Suffolk County 36103, Ulster County  36111)
 
 ## Disconnected Youth (v149)
 - Complete, numerically equal
@@ -401,34 +400,72 @@ waldo::compare(x1, v137, tolerance = 1e-4, list_as_map = TRUE)
 
 
 # v141 - Residential Segregation – Black/White
-- TODO from scripts/v141_residential_segregation.qmd
 
+Index of dissimilarity where higher values indicate greater residential segregation between Black and White county residents.
+
+Calculated with custom code that is different from all other measures.
 
 
 ```{r}
-tabid <- "B11002"
+tabid <- c("B11002A", "B11002B")
 
+# Join white and black tables by GEOID
+x <- full_join(
+    get_raw_table(ACS_YEAR, tabid[1], tract = TRUE) %>% select(NAME, ucgid, wht = B11002A_001E),
+    get_raw_table(ACS_YEAR, tabid[2], tract = TRUE) %>% select(ucgid, blk = B11002B_001E),
+    by = "ucgid"
+  ) %>%
+  standardize_fips() %>%
+  # only keep tract-level observations
+  filter(str_sub(ucgid, 1, 3) == "140")
 
-vars <- c(
-  "B11002_001E",   # Total households
-  "B11002A_001E",  # White alone, not Hispanic
-  "B11002B_001E"   # Black or African American alone
-)
+# calculate dissimilarity index for a groupped dataframe (by state or by county)
+calc_diss_index <- function(df) {
+  df %>%
+    # suppress counties with less than 100 black population
+    filter(sum(blk) >= 100) %>%
+    mutate(
+      gr_wht = sum(wht), # total white population in geographic group
+      gr_blk = sum(blk), # total black population in geographic group
+      tr_diss = abs(wht / gr_wht - blk / gr_blk) # dissimilarity in tract shares of white and black 
+    ) %>%
+    # index = (1/2) SUM|(b/B) - (w/W)| * 100)
+    summarize(
+      diss_index = 50 * sum(tr_diss, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(diss_index = replace_values(diss_index, 0 ~ NA))
+}
 
-x <- get_raw_table(ACS_YEAR, tabid)
+# apply aggregated calculation at US, state and county level
+v141 <- bind_rows(
+  x %>%
+    group_by(statecode, countycode) %>%
+    calc_diss_index(),
+  x %>%
+    group_by(statecode) %>%
+    calc_diss_index() %>%
+    mutate(countycode = "000"),
+  x %>%
+    calc_diss_index() %>%
+    mutate(statecode = "00", countycode = "000")
+  ) %>%
+  arrange(statecode, countycode) %>%
+  rename(v141_rawvalue = diss_index)
 
-x %>%
-  select(!(ends_with("A") | ends_with("M")))
 
 ```
 
 
 ```{r}
-x1 <- read_csv("measure_datasets/v141_r2025.csv") %>%
+x0 <- read_csv("measure_datasets/v141_r2025.csv") %>%
   arrange(statecode, countycode)
 
-x1
+full_join(x0, v141, by = c("statecode", "countycode")) %>%
+  filter(!util$almost_equal(v141_rawvalue.x, v141_rawvalue.y))
+
 ```
+
 
 # v149 - DISCONNECTED YOUTH
 
@@ -597,18 +634,12 @@ cmp <- cmp_vars[-(1:2)] %>%
 cmp
 
 
-almost_equal <- function(x, y, rel_tol = 0.001, abs_tol = Inf) {
-  abs_dif <- abs(x - y)
-  rel_dif <- ifelse(x == 0, 0, abs_dif / abs((x + y) / 2))
-  (is.na(x) & is.na(y)) | !is.na(x) & !is.na(y) & abs_dif <= abs_tol & rel_dif <= rel_tol
-}
-
 x <- full_join(
   select(x0, statecode, countycode, v0 = cilow),
   select(x1, statecode, countycode, v1 = cilow),
   by = c("statecode", "countycode")
 ) %>%
-  filter(!almost_equal(v0, v1))
+  filter(!util$almost_equal(v0, v1))
 
 raw_vars <- base::union(all.vars(numerator), all.vars(denominator)) %>%
   c(., map_chr(., \(xe) sub("E$", "M", xe)))
