@@ -7,12 +7,14 @@ source("R/util.R", local = (util <- new.env()))
 ipath <- list(
   county_fips_with_ct_old = "inputs/county_fips_with_ct_old.sas7bdat",
   state_fips = "inputs/state_fips.sas7bdat",
+  acs5_api_vars_ = "https://api.census.gov/data/{year}/acs/acs5/{subject}variables.json",
   acs5_api_det_ = "https://api.census.gov/data/{year}/acs/acs5?get=group({tabid})&ucgid={ucgid}&key={key}",
   acs5_api_sub_ = "https://api.census.gov/data/{year}/acs/acs5/subject?get=group({tabid})&ucgid={ucgid}&key={key}"
 )
 
 # output paths
 opath <- list(
+  acs5_vars_ = "data/raw/acs5/{year}_vars_{tab_type}.pq",
   acs5_table_ = "data/raw/acs5/{year}/{tabid}.pq"
 )
 
@@ -27,6 +29,35 @@ data_census_gov_url <- function(year, tabid) {
   url
 }
 
+#' Retrieve ACS-5 list of variables from Census Data API
+get_raw_vars <- function(year, tab_type = c("B", "C", "S")) {
+  tab_type <- rlang::arg_match(tab_type)
+
+  cache_path <- str_glue(opath$acs5_vars_)
+  if (file.exists(cache_path)) {
+    logger::log_info("Loading ACS-5 {year} variable definitions for table type {tab_type} from cache {cache_path}")
+    return(arrow::read_parquet(cache_path))
+  }
+
+  subject <- ifelse(tab_type == "S", "subject/", "")
+  url <- str_glue(ipath$acs5_api_vars_)
+  resp_json <- url |>
+    httr2::request() |>
+    httr2::req_perform() |>
+    httr2::resp_body_json()
+
+  df <- resp_json$variables |>
+    bind_rows(.id = "variable")
+
+  logger::log_info("Saving ACS-5 {year} variable definitions for table type {tab_type} to cache {cache_path}")
+  arrow::write_parquet(df, util$mkdir(cache_path))
+  df
+
+}
+
+
+
+
 
 
 #' Retrieve ACS-5 table from Census Data API
@@ -39,7 +70,7 @@ get_raw_table <- function(year, tabid) {
     logger::log_error("Valid tables are details (B, C) and subject (S)")
   }
 
-  cache_path <- stringr::str_glue(opath$acs5_table_)
+  cache_path <- str_glue(opath$acs5_table_)
   if (file.exists(cache_path)) {
     logger::log_info("Loading ACS-5 {year} table {tabid} from cache {cache_path}")
     return(arrow::read_parquet(cache_path))

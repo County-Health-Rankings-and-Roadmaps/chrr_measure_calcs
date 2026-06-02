@@ -18,3 +18,8 @@ renv/
 
 # environment file with secrets
 .Renviron
+
+# Quarto notebooks
+/.quarto/
+**/*.quarto_ipynb
+*.html

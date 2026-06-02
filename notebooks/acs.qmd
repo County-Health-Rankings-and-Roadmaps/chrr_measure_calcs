@@ -70,19 +70,37 @@ library(tidyverse)
 source("R/acs.R")
 
 ACS_YEAR <- 2023
+VAR_META <- list(
+  BC = get_raw_vars(ACS_YEAR, tab_type = "B"),
+  S = get_raw_vars(ACS_YEAR, tab_type = "S")
+) %>%
+  bind_rows()
+
+#' Metadata for variables of given expressions
+var_meta_table <- function(...) {
+  var_expressions <- list(...)
+  var_expressions %>%
+    map(\(vex) {
+      VAR_META %>%
+        filter(variable %in% all.vars(vex)) %>%
+        arrange(variable)
+    }) %>%
+    bind_rows(.id = "term") %>%
+    select(term, variable, label)
+}
+
 
 ```
 
 
 # Raw data
 
+Full tables are pulled from Census Data API and saved to local cache for repeated access.
 
 ```{r}
-
-x <- get_raw_table(ACS_YEAR, "B15001")
-
-x %>% head()
-
+#| eval: false
+get_raw_table(ACS_YEAR, "B01001") %>%
+  head()
 
 ```
 
@@ -101,10 +119,14 @@ The denominator is the total county population aged 5 and over.
 
 ```{r}
 tabid <- "B16005"
-cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid))
-
 numerator <- expr(B16005_007E + B16005_012E + B16005_008E + B16005_013E + B16005_017E + B16005_022E + B16005_018E + B16005_023E + B16005_029E + B16005_030E + B16005_034E + B16005_035E + B16005_039E + B16005_040E + B16005_044E + B16005_045E)
 denominator <- expr(B16005_001E)
+
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid))
+data.frame(term = c("numerator", "denominator"),
+  formula = c(deparse1(numerator), deparse1(denominator)))
+var_meta_table(numerator = numerator, denominator = denominator)
+
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
   standardize_fips() %>% 
@@ -122,6 +144,8 @@ v059 <- x %>%
 ```
 
 ```{r}
+#| echo: false
+#| eval: false
 x1 <- read_csv("measure_datasets/v059_r2025.csv") %>%
   arrange(statecode, countycode)
 
