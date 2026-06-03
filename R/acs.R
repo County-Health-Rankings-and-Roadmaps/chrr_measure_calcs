@@ -17,7 +17,8 @@ ipath <- list(
 opath <- list(
   acs5_vars_ = "data/raw/acs5/{year}_vars_{tab_type}.pq",
   acs5_table_ = "data/raw/acs5/{year}/{tabid}{tract}.pq",
-  chas_ = "data/raw/chas/{years}-{geo}-csv.zip"
+  chas_ = "data/raw/chas/{years}-{geo}-csv.zip",
+  chrr_measure_ = "data/proc/measure/{vname}.csv"
 )
 
 #' URL to preview national table at data.census.gov

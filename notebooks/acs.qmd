@@ -1,13 +1,15 @@
 ---
-title: "ACS variables"
+title: "ACS variables in CHRR"
 format:
   html:
+    author: Anton Babkin
     date: today
     toc: true
     toc-depth: 2
     embed-resources: true
     code-fold: true
     code-overflow: wrap
+    df-print: kable
 ---
 
 
@@ -23,53 +25,102 @@ Pilot the calculation of Homeownership (v153), Severe Housing Problems (v136), S
 Calculated measures from ACS 2023 are compared against previously calculated CHRR-2025 values.
 Old calculations did not apply "max variance" rule for zero-valued estimates.
 
-##  % Not Proficient in English (v059)
-- Complete, numerically equal
+- % Not Proficient in English (v059)
+  - Complete, numerically equal
 
-## Driving Alone to Work (v067)
-- Base measure complete, numerically equal
-- Calc by race not implemented
+- Driving Alone to Work (v067)
+  - Base measure complete, numerically equal
+  - Calc by race not implemented
 
-## Some College (v069)
-- Complete, numerically equal
+- Some College (v069)
+  - Complete, numerically equal
 
-## Children in Single-Parent Households (v082)
-- Complete, numerically equal
+- Children in Single-Parent Households (v082)
+  - Complete, numerically equal
 
-## Severe Housing Problems (v136)
-- Base variable complete, numerically equal except:
-  - CT, needs crosswalk from old to new via tracts
-  - FIPS 02164, CI NA?
+- Severe Housing Problems (v136)
+  - Base variable complete, numerically equal except:
+    - CT, needs crosswalk from old to new via tracts
+    - FIPS 02164, CI NA?
 
-## Long Commute – Driving Alone (v137)
-- Complete, numerically equal
-- No ratio calculation, proportions already in raw data.
-- Wrong denominator value in source code (`denominator = S0802_C01_001E`, total)? Should be `S0802_C02_001E`, drove alone.
+- Long Commute – Driving Alone (v137)
+  - Complete, numerically equal
+  - No ratio calculation, proportions already in raw data.
+  - Wrong denominator value in source code (`denominator = S0802_C01_001E`, total)? Should be `S0802_C02_001E`, drove alone.
 
-##  Residential Segregation – Black/White (v141)
-- Complete, numerically equal except:
-  - US and 2 NY counties (Suffolk County 36103, Ulster County  36111)
+- Residential Segregation – Black/White (v141)
+  - Complete, numerically equal except:
+    - US and 2 NY counties (Suffolk County 36103, Ulster County  36111)
 
-## Disconnected Youth (v149)
-- Complete, numerically equal
-- Special case handling, maybe include in general function?
+- Disconnected Youth (v149)
+  - Complete, numerically equal
+  - Special case handling, maybe include in general function?
 
-## Homeownership (v153)
-- Complete, numerically equal
+- Homeownership (v153)
+  - Complete, numerically equal
 
-## High School Completion (v168)
-- Complete, numerically equal
+- High School Completion (v168)
+  - Complete, numerically equal
 
 
 # Libraries
 
 ```{r}
+#| output: false
 
 library(tidyverse)
 
 source("R/acs.R")
 
 ACS_YEAR <- 2023
+CHAS_YEAR <- 2021
+
+```
+
+
+# Data
+
+Full tables are pulled from Census Data API and saved to local cache for repeated access.
+
+```{r}
+#| eval: false
+get_raw_table(ACS_YEAR, "B01001") %>%
+  head()
+
+```
+
+## cache
+
+Pack cached raw input files to Zip.
+
+```{r}
+#| eval: false
+# list of all raw data tables used in the calculations
+c(
+  str_glue(opath$acs5_vars_, year = ACS_YEAR, tab_type = c("B", "S")),
+  str_glue(opath$acs5_table_, year = ACS_YEAR, tract = "",
+    tabid = c("B16005", "B08301", "B15001", "B09005", "S0802", "B14005", "B25003", "S1501")),
+  str_glue(opath$acs5_table_, year = ACS_YEAR, tract = "_tract",
+    tabid = c("B11002A", "B11002B")),
+  str_glue(opath$chas_, years = paste0(CHAS_YEAR-4, "thru", CHAS_YEAR), geo = c("040", "050"))
+) %>%
+  util$zip_pack("acs_raw_inputs_2026-06-03.zip", files = ., overwrite = TRUE)
+
+```
+
+
+Unpack raw input files from Zip.
+
+```{r}
+#| eval: false
+util$zip_unpack("acs_raw_inputs_2026-06-03.zip", overwrite = TRUE)
+
+```
+
+
+## ACS variable metadata
+
+```{r}
 VAR_META <- list(
   BC = get_raw_vars(ACS_YEAR, tab_type = "B"),
   S = get_raw_vars(ACS_YEAR, tab_type = "S")
@@ -93,18 +144,6 @@ var_meta_table <- function(...) {
 ```
 
 
-# Raw data
-
-Full tables are pulled from Census Data API and saved to local cache for repeated access.
-
-```{r}
-#| eval: false
-get_raw_table(ACS_YEAR, "B01001") %>%
-  head()
-
-```
-
-
 # v059 - % Not Proficient in English
 
 
@@ -122,7 +161,7 @@ tabid <- "B16005"
 numerator <- expr(B16005_007E + B16005_012E + B16005_008E + B16005_013E + B16005_017E + B16005_022E + B16005_018E + B16005_023E + B16005_029E + B16005_030E + B16005_034E + B16005_035E + B16005_039E + B16005_040E + B16005_044E + B16005_045E)
 denominator <- expr(B16005_001E)
 
-cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid))
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid), "\n")
 data.frame(term = c("numerator", "denominator"),
   formula = c(deparse1(numerator), deparse1(denominator)))
 var_meta_table(numerator = numerator, denominator = denominator)
@@ -141,15 +180,17 @@ x <- get_raw_table(ACS_YEAR, tabid) %>%
 v059 <- x %>%
   select(statecode, countycode, starts_with("v059"))
 
+skimr::skim(v059)
+
 ```
 
 ```{r}
 #| echo: false
 #| eval: false
-x1 <- read_csv("measure_datasets/v059_r2025.csv") %>%
+x0 <- read_csv("measure_datasets/v059_r2025.csv") %>%
   arrange(statecode, countycode)
 
-waldo::compare(x1, v059, tolerance = 1e-4, list_as_map = TRUE)
+waldo::compare(x0, v059, tolerance = 1e-4, list_as_map = TRUE)
 
 ```
 
@@ -157,15 +198,21 @@ waldo::compare(x1, v059, tolerance = 1e-4, list_as_map = TRUE)
 # v067 - PERCENT OF LABOR FORCE THAT DRIVES ALONE TO WORK
 
 numerator =	number of workers who commute alone to work via car, truck, or van.
+
 denominator	= total workforce
+
 raw_value	= Percentage of workers who drive alone to work
 
 ```{r}
 tabid <- "B08301"
-cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid))
-
 numerator <- expr(B08301_003E)
 denominator <- expr(B08301_001E)
+
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid), "\n")
+data.frame(term = c("numerator", "denominator"),
+  formula = c(deparse1(numerator), deparse1(denominator)))
+var_meta_table(numerator = numerator, denominator = denominator)
+
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
   standardize_fips() %>% 
@@ -178,24 +225,30 @@ x <- get_raw_table(ACS_YEAR, tabid) %>%
 v067 <- x %>%
   select(statecode, countycode, starts_with("v067"))
 
+skimr::skim(v067)
+
 ```
 
 ```{r}
-x1 <- read_csv("measure_datasets/v067_r2025.csv") %>%
+#| echo: false
+#| eval: false
+x0 <- read_csv("measure_datasets/v067_r2025.csv") %>%
   arrange(statecode, countycode)
 
-waldo::compare(x1, v067, tolerance = 1e-4, list_as_map = TRUE)
+waldo::compare(x0, v067, tolerance = 1e-4, list_as_map = TRUE)
 
 ```
 
 
 ## v067_other - Driving Alone to Work
 
-`race_aian`	AIAN	Percentage of American Indian and Alaska Native workers who drive alone to work	
-`race_asian`	Asian	Percentage of Asian/Pacific Islander workers who drive alone to work
-`race_black`	Black	Percentage of Black workers who drive alone to work	Percentage
-`race_hispanic`	Hispanic	Percentage of Hispanic workers who drive alone to work
-`race_white`	white	Percentage of non-Hispanic white workers who drive alone to work
+NOT IMPLEMENTED
+
+- `race_aian`	AIAN	Percentage of American Indian and Alaska Native workers who drive alone to work	
+- `race_asian`	Asian	Percentage of Asian/Pacific Islander workers who drive alone to work
+- `race_black`	Black	Percentage of Black workers who drive alone to work	Percentage
+- `race_hispanic`	Hispanic	Percentage of Hispanic workers who drive alone to work
+- `race_white`	white	Percentage of non-Hispanic white workers who drive alone to work
 
 
 ```{r}
@@ -212,17 +265,23 @@ var_ls_067_other <- c(
 # v069 - SOME COLLEGE
 
 numerator =	Total number of individuals ages 25-44 with at least some post-secondary education
+
 denominator	= Total number of individuals ages 25-44.
+
 raw_value	= Percentage of adults age 25-44 with some post-secondary education
 
 ```{r}
 tabid <- "B15001"
-cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid))
-
 numerator <- expr(B15001_015E + B15001_016E + B15001_017E + B15001_018E + B15001_023E + 
         B15001_024E + B15001_025E + B15001_026E + B15001_056E + B15001_057E + B15001_058E +  
         B15001_059E + B15001_064E + B15001_065E + B15001_066E + B15001_067E)
 denominator <- expr(B15001_011E + B15001_019E + B15001_052E + B15001_060E)
+
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid), "\n")
+data.frame(term = c("numerator", "denominator"),
+  formula = c(deparse1(numerator), deparse1(denominator)))
+var_meta_table(numerator = numerator, denominator = denominator)
+
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
   standardize_fips() %>% 
@@ -236,80 +295,43 @@ x <- get_raw_table(ACS_YEAR, tabid) %>%
 v069 <- x %>%
   select(statecode, countycode, starts_with("v069"))
 
+skimr::skim(v069)
+
 ```
 
 
 ```{r}
+#| echo: false
+#| eval: false
 
-x1 <- read_csv("measure_datasets/v069_r2025.csv") %>%
+x0 <- read_csv("measure_datasets/v069_r2025.csv") %>%
   arrange(statecode, countycode)
 
-waldo::compare(x1, v069, tolerance = 1e-4, list_as_map = TRUE)
+waldo::compare(x0, v069, tolerance = 1e-4, list_as_map = TRUE)
 
 ```
-
-## track differences
-
-```{r}
-cmp_vars <- c("statecode", "countycode", "numerator", "denominator", "rawvalue", "cilow", "cihigh")
-x0 <- read_csv("measure_datasets/v069_r2025.csv") %>%
-  arrange(statecode, countycode) %>%
-  rename_with(\(x) str_remove(x, "^v..._")) %>%
-  select(all_of(cmp_vars))
-
-numerator <- expr(B15001_015E + B15001_016E + B15001_017E + B15001_018E + B15001_023E + 
-        B15001_024E + B15001_025E + B15001_026E + B15001_056E + B15001_057E + B15001_058E +  
-        B15001_059E + B15001_064E + B15001_065E + B15001_066E + B15001_067E)
-denominator <- expr(B15001_011E + B15001_019E + B15001_052E + B15001_060E)
-
-x1 <- get_raw_table(ACS_YEAR, "B15001") %>%
-  standardize_fips() %>% 
-  calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, zero_max = FALSE)
-
-cmp <- cmp_vars[-(1:2)] %>%
-  set_names() %>%
-  map(\(var) {
-    waldo::compare(x0[[var]], x1[[var]], tolerance = 1e-4)
-  })
-
-cmp$cilow
-
-almost_equal <- function(x, y, rel_tol = 0.001, abs_tol = Inf) {
-  abs_dif <- abs(x - y)
-  rel_dif <- ifelse(x == 0, 0, abs_dif / abs((x + y) / 2))
-  !is.na(x) & !is.na(y) & abs_dif <= abs_tol & rel_dif <= rel_tol
-}
-
-x <- full_join(
-  select(x0, statecode, countycode, v0 = cilow),
-  select(x1, statecode, countycode, v1 = cilow),
-  by = c("statecode", "countycode")
-) %>%
-  filter(!almost_equal(v0, v1))
-
-x1e <- x1 %>%
-  right_join(x) %>%
-  select(!starts_with("B15001"))
-
-
-
-```
-
 
 
 # v082 - SINGLE-PARENT HOUSEHOLDS
 
 numerator =	Number of children that live in single-parent households
+
 denominator	= Number of children in households
+
 raw_value	= Percentage of children that live in single-parent households
 
 
 ```{r}
-
+tabid <- "B09005"
 numerator <- expr(B09005_004E + B09005_005E)
 denominator <- expr(B09005_001E)
 
-x <- get_raw_table(ACS_YEAR, "B09005") %>%
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid), "\n")
+data.frame(term = c("numerator", "denominator"),
+  formula = c(deparse1(numerator), deparse1(denominator)))
+var_meta_table(numerator = numerator, denominator = denominator)
+
+x <- get_raw_table(ACS_YEAR, tabid) %>%
   standardize_fips() %>% 
   add_flag_CT() %>%
   calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator) %>%
@@ -328,37 +350,38 @@ x <- get_raw_table(ACS_YEAR, "B09005") %>%
 v082 <- x %>%
   select(statecode, countycode, starts_with("v082"))
 
+skimr::skim(v082)
+
 ```
 
 
 ```{r}
+#| echo: false
+#| eval: false
 
-x1 <- read_csv("measure_datasets/v082_r2025.csv") %>%
+x0 <- read_csv("measure_datasets/v082_r2025.csv") %>%
   arrange(statecode, countycode)
 
-waldo::compare(x1, v082, tolerance = 1e-4, list_as_map = TRUE)
+waldo::compare(x0, v082, tolerance = 1e-4, list_as_map = TRUE)
 
 ```
 
 
 # v136 - Severe Housing Problems
 
-`utils::download.file()` fails to get the file, but returns a success result code (0).
-For now, manually download the file from "https://www.huduser.gov/portal/datasets/cp/2018thru2022-050-csv.zip" to "data/raw/chas/2018thru2022-050-csv.zip".
-
 Columns are similar to ACS columns, but are named differently.
 We rename them to ACS format here to reuse ratio and MOE calculation function.
 
 
 ```{r}
-chas_year <- 2021
+
 numerator <- expr(T2_3E + T2_76E)
 denominator <- expr(T2_1E)
 
 
 x1 <- bind_rows(
-  get_raw_chas(chas_year, "050", "Table2"),
-  get_raw_chas(chas_year, "040", "Table2") %>% mutate(cnty = "000")
+  get_raw_chas(CHAS_YEAR, "050", "Table2"),
+  get_raw_chas(CHAS_YEAR, "040", "Table2") %>% mutate(cnty = "000")
 ) %>%
   rename(ucgid = geoid) %>%
   standardize_fips() %>%
@@ -389,12 +412,14 @@ x2 <- x1 %>%
 v136 <- x2 %>%
   select(statecode, countycode, starts_with("v136"))
 
+skimr::skim(v136)
 
 ```
 
 
 ```{r}
-
+#| echo: false
+#| eval: false
 x0 <- read_csv("measure_datasets/v136_r2025.csv") %>%
   arrange(statecode, countycode)
 
@@ -414,16 +439,21 @@ x
 # v137 - LONG COMMUTE - DRIVING ALONE 
 
 numerator =	number of workers who drive alone (via car, truck, or van) for more than 30 minutes during their commute
+
 denominator	= number of workers who drive alone (via car, truck, or van) during their commute
+
 raw_value	= Among workers who commute in their car alone, the percentage that commute more than 30 minutes
 
 
 ```{r}
 tabid <- "S0802"
-cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid))
-
 denominator <- expr(S0802_C02_001E)
 rawvalue <- expr(S0802_C02_086E + S0802_C02_087E + S0802_C02_088E + S0802_C02_089E)
+
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid), "\n")
+data.frame(term = c("rawvalue", "denominator"),
+  formula = c(deparse1(rawvalue), deparse1(denominator)))
+var_meta_table(rawvalue = rawvalue, denominator = denominator)
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
   standardize_fips() %>% 
@@ -448,17 +478,21 @@ x <- get_raw_table(ACS_YEAR, tabid) %>%
 v137 <- x %>%
   select(statecode, countycode, starts_with("v137"))
 
+skimr::skim(v137)
+
 ```
 
 
 ```{r}
+#| echo: false
+#| eval: false
 
-x1 <- read_csv("measure_datasets/v137_r2025.csv") %>%
+x0 <- read_csv("measure_datasets/v137_r2025.csv") %>%
   arrange(statecode, countycode) %>%
   # old uses wrong denominator
   select(-v137_denominator)
 
-waldo::compare(x1, v137, tolerance = 1e-4, list_as_map = TRUE)
+waldo::compare(x0, v137, tolerance = 1e-4, list_as_map = TRUE)
 
 ```
 
@@ -471,9 +505,21 @@ Index of dissimilarity where higher values indicate greater residential segregat
 
 Calculated with custom code that is different from all other measures.
 
+$$
+D_r = \frac{1}{2}\sum_{i \in I_r} 100 \left\lvert \frac{w_i}{W_r} - \frac{b_i}{B_r} \right\rvert
+$$
+
+- $D_r$ Dissimilarity index for state or county $r$
+- $w_i$ and $b_i$ number of White and Black households in tract $i$
+- $W_r$ and $W_i$ number of White and Black households in state or county $r$
+- $I_r$ set of tracts in state of county $r$
 
 ```{r}
+
 tabid <- c("B11002A", "B11002B")
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid[1]), "\n")
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid[2]), "\n")
+var_meta_table(w = expr(B11002A_001E), b = expr(B11002B_001E))
 
 # Join white and black tables by GEOID
 x <- full_join(
@@ -519,11 +565,15 @@ v141 <- bind_rows(
   arrange(statecode, countycode) %>%
   rename(v141_rawvalue = diss_index)
 
+skimr::skim(v141)
 
 ```
 
 
 ```{r}
+#| eval: false
+#| echo: false
+
 x0 <- read_csv("measure_datasets/v141_r2025.csv") %>%
   arrange(statecode, countycode)
 
@@ -536,17 +586,25 @@ full_join(x0, v141, by = c("statecode", "countycode")) %>%
 # v149 - DISCONNECTED YOUTH
 
 numerator =	number of people, ages 16-19, who are neither working nor in school
+
 denominator	= total county population, ages 16-19
+
 raw_value	= Percentage of teens and young adults ages 16-19 who are neither working nor in school
 
 
 ```{r}
-
+tabid <- "B14005"
 numerator <- expr(B14005_010E + B14005_011E + B14005_014E + B14005_015E +
            B14005_024E + B14005_025E + B14005_028E + B14005_029E)
 denominator <- expr(B14005_001E)
 
-x <- get_raw_table(ACS_YEAR, "B14005") %>%
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid), "\n")
+data.frame(term = c("numerator", "denominator"),
+  formula = c(deparse1(numerator), deparse1(denominator)))
+var_meta_table(numerator = numerator, denominator = denominator)
+
+
+x <- get_raw_table(ACS_YEAR, tabid) %>%
   standardize_fips() %>% 
   add_flag_CT() %>%
   # calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, zero_max = FALSE) %>%
@@ -570,15 +628,19 @@ x <- get_raw_table(ACS_YEAR, "B14005") %>%
 v149 <- x %>%
   select(statecode, countycode, starts_with("v149"))
 
+skimr::skim(v149)
+
 ```
 
 
 ```{r}
+#| echo: false
+#| eval: false
 
-x1 <- read_csv("measure_datasets/v149_r2025.csv") %>%
+x0 <- read_csv("measure_datasets/v149_r2025.csv") %>%
   arrange(statecode, countycode)
 
-waldo::compare(x1, v149, tolerance = 1e-4, list_as_map = TRUE)
+waldo::compare(x0, v149, tolerance = 1e-4, list_as_map = TRUE)
 
 ```
 
@@ -594,10 +656,14 @@ Denominator: The denominator is the total occupied housing units in a county.
 
 ```{r}
 tabid <- "B25003"
-cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid))
-
 numerator <- expr(B25003_002E)
 denominator <- expr(B25003_001E)
+
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid), "\n")
+data.frame(term = c("numerator", "denominator"),
+  formula = c(deparse1(numerator), deparse1(denominator)))
+var_meta_table(numerator = numerator, denominator = denominator)
+
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
   standardize_fips() %>% 
@@ -610,15 +676,19 @@ x <- get_raw_table(ACS_YEAR, tabid) %>%
 v153 <- x %>%
   select(statecode, countycode, starts_with("v153"))
 
+skimr::skim(v153)
+
 ```
 
 
 ```{r}
+#| echo: false
+#| eval: false
 
-x1 <- read_csv("measure_datasets/v153_r2025.csv") %>%
+x0 <- read_csv("measure_datasets/v153_r2025.csv") %>%
   arrange(statecode, countycode)
 
-waldo::compare(x1, v153, tolerance = 1e-4, list_as_map = TRUE)
+waldo::compare(x0, v153, tolerance = 1e-4, list_as_map = TRUE)
 
 ```
 
@@ -626,16 +696,22 @@ waldo::compare(x1, v153, tolerance = 1e-4, list_as_map = TRUE)
 # v168 - HIGH SCHOOL COMPLETION
 
 numerator =	# Completed High School (Adults age 25 and over with a high school diploma or equivalent)
+
 denominator =	Population	(Adults age 25 and over)
+
 raw_value	= % Completed High School
 
 
 ```{r}
 tabid <- "S1501"
-cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid))
-
 numerator <- expr(S1501_C01_014E)
 denominator <- expr(S1501_C01_006E)
+
+cat("National HTML table:", data_census_gov_url(ACS_YEAR, tabid), "\n")
+data.frame(term = c("numerator", "denominator"),
+  formula = c(deparse1(numerator), deparse1(denominator)))
+var_meta_table(numerator = numerator, denominator = denominator)
+
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
   standardize_fips() %>% 
@@ -648,15 +724,19 @@ x <- get_raw_table(ACS_YEAR, tabid) %>%
 v168 <- x %>%
   select(statecode, countycode, starts_with("v168"))
 
+skimr::skim(v168)
+
 ```
 
 
 ```{r}
+#| echo: false
+#| eval: false
 
-x1 <- read_csv("measure_datasets/v168_r2025.csv") %>%
+x0 <- read_csv("measure_datasets/v168_r2025.csv") %>%
   arrange(statecode, countycode)
 
-waldo::compare(x1, v168, tolerance = 1e-4, list_as_map = TRUE)
+waldo::compare(x0, v168, tolerance = 1e-4, list_as_map = TRUE)
 
 ```
 
@@ -664,6 +744,7 @@ waldo::compare(x1, v168, tolerance = 1e-4, list_as_map = TRUE)
 # CHRR raw ACS-5
 
 ```{r}
+#| eval: false
 chrr_acs5 <- read_csv("raw_data/ACS/acs_data_2019-2023.zip")%>% 
   rename(fipscode = GEOID) %>% 
   glimpse()
@@ -676,6 +757,7 @@ chrr_acs5 <- read_csv("raw_data/ACS/acs_data_2019-2023.zip")%>%
 Helper code to compare new computations with old CHRR results.
 
 ```{r}
+#| eval: false
 numerator <- expr(S1501_C01_014E)
 denominator <- expr(S1501_C01_006E)
 chrr_path <- "measure_datasets/v168_r2025.csv"

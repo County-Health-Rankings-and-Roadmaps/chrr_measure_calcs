@@ -48,3 +48,32 @@ almost_equal <- function(x, y, rel_tol = 0.001, abs_tol = Inf) {
   rel_dif <- ifelse(x == 0, 0, abs_dif / abs((x + y) / 2))
   (is.na(x) & is.na(y)) | !is.na(x) & !is.na(y) & abs_dif <= abs_tol & rel_dif <= rel_tol
 }
+
+#' Detect project root directory by presense of key files
+wd_is_root <- function() {
+  file.exists("README.md", "LICENSE")
+}
+
+
+#' Pack list of files into Zip archive, preserving relative paths
+zip_pack <- function(zipfile, files, overwrite = FALSE) {
+  stopifnot(wd_is_root())
+  if (file.exists(zipfile)) {
+    if (overwrite) {
+      logger::log_info(paste("Replacing existing Zip file:", zipfile))
+      file.remove(zipfile)
+    }
+    else stop("Zip file already exists: ", zipfile)
+  }
+  files <- files |>
+    as.character()
+  zip(mkdir(zipfile), files)
+}
+
+
+#' Unpack Zip archive
+zip_unpack <- function(zipfile, overwrite = FALSE) {
+  stopifnot(wd_is_root())
+  stopifnot(file.exists(zipfile))
+  unzip(zipfile, overwrite = overwrite)
+}
