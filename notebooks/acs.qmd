@@ -38,9 +38,9 @@ Old calculations did not apply "max variance" rule for zero-valued estimates.
   - Complete, numerically equal
 
 - Severe Housing Problems (v136)
-  - Base variable complete, numerically equal except:
-    - CT, needs crosswalk from old to new via tracts
-    - FIPS 02164, CI NA?
+  - Complete, numerically equal except:
+    - CT crosswalk not needed for 2024
+    - FIPS 02164 CI using ratio formula
 
 - Long Commute – Driving Alone (v137)
   - Complete, numerically equal
@@ -49,7 +49,7 @@ Old calculations did not apply "max variance" rule for zero-valued estimates.
 
 - Residential Segregation – Black/White (v141)
   - Complete, numerically equal except:
-    - US and 2 NY counties (Suffolk County 36103, Ulster County  36111)
+    - 2 NY counties (Suffolk County 36103, Ulster County  36111)
 
 - Disconnected Youth (v149)
   - Complete, numerically equal
@@ -71,8 +71,19 @@ library(tidyverse)
 
 source("R/acs.R")
 
+ACS_YEAR <- 2024
+CHAS_YEAR <- 2022
+VAR_ZERO_MAX <- TRUE
+
+```
+
+# Comparing with r2025
+
+```{r}
+
 ACS_YEAR <- 2023
 CHAS_YEAR <- 2021
+VAR_ZERO_MAX <- FALSE
 
 ```
 
@@ -450,7 +461,7 @@ denominator <- expr(T2_1E)
 
 x1 <- bind_rows(
   get_raw_chas(CHAS_YEAR, "050", "Table2"),
-  get_raw_chas(CHAS_YEAR, "040", "Table2") %>% mutate(cnty = "000")
+  get_raw_chas(CHAS_YEAR, "040", "Table2")
 ) %>%
   rename(ucgid = geoid) %>%
   standardize_fips() %>%
@@ -459,8 +470,7 @@ x1 <- bind_rows(
   rename_with(\(x) {
     ifelse(substr(x, 4, 6) == "est", sub("est(.+)$", "\\1E", x), sub("moe(.+)$", "\\1M", x))
   }, .cols = starts_with("T2_")) %>%
-  # calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator)
-  calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, zero_max = FALSE)
+  calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, zero_max = VAR_ZERO_MAX)
 
 # calc US aggregate from states
 x2 <- x1 %>%
@@ -492,18 +502,112 @@ skimr::skim(v136)
 x0 <- read_csv("measure_datasets/v136_r2025.csv") %>%
   arrange(statecode, countycode)
 
-waldo::compare(x0, v136, tolerance = 1e-4, list_as_map = TRUE)
+# without CT
+waldo::compare(
+  x0 %>% filter(statecode != "09"), 
+  v136 %>% filter(statecode != "09"), 
+  tolerance = 1e-4, list_as_map = TRUE)
 
-xcmp <- full_join(x0, v136, by = c("statecode", "countycode")) %>%
-  # known difference CT
-  filter(statecode != "09")
-
-x <- xcmp %>%
-  # filter(!util$almost_equal(v136_rawvalue.x, v136_rawvalue.y))
-  filter(!util$almost_equal(v136_cihigh.x, v136_cihigh.y))
-x
+# known difference FIPS 02164:
+# previous calculations used proportion formula for MOE (with minus), and it results in negative varience, hence CI are NA
+# newer calculations fall back to ratio formula (with plus)
 
 ```
+
+
+## v136 Severe Housing Problems (subgroups)
+
+- Severe cost burden (other data 1)
+
+Table 8	- Tenure (2) by Household Income (5) by Housing Cost Burden (4) by Substandard Housing (2)
+
+- Overcrowding (other data 2)
+
+Table 10 - Tenure (2) by Overcrowding (3) by Household Income (5) by Family Status (3)
+
+- Inadequate facilities (other data 3)
+
+Table 3 - Tenure (2) by Housing Unit Problem Severity (7) by Household Income (5)
+
+
+```{r}
+v136_other_data_specs <- list(
+  v136_other_data_1 = list(
+    tabid = "Table8",
+    numerator = expr(T8_10E + T8_23E + T8_36E + T8_49E + T8_62E + T8_76E + T8_89E + T8_102E + T8_115E + T8_128E),
+    denominator = expr(T8_1E - T8_13E - T8_26E - T8_39E - T8_52E - T8_65E - T8_79E - T8_92E - T8_105E - T8_118E - T8_131E)
+  ),
+  v136_other_data_2 = list(
+    tabid = "Table10",
+    numerator = expr(T10_24E + T10_45E + T10_88E + T10_109E),
+    denominator = expr(T10_1E)
+  ),
+  v136_other_data_3 = list(
+    tabid = "Table3",
+    numerator = expr(T3_3E + T3_46E),
+    denominator = expr(T3_1E)
+  )
+)
+
+x <- v136_other_data_specs %>%
+  imap(\(specs, prefix) {
+    # calc states and counties
+    x1 <- bind_rows(
+      get_raw_chas(CHAS_YEAR, "050", specs$tabid),
+      get_raw_chas(CHAS_YEAR, "040", specs$tabid)
+    ) %>%
+      rename(ucgid = geoid) %>%
+      standardize_fips() %>%
+      filter(statecode != "00") %>%
+      rename_with(\(x) str_replace_all(x, c("est(.+)$" = "\\1E", "moe(.+)$" = "\\1M"))) %>%
+      calc_acs_ratio(num_expr = !!specs$numerator, den_expr = !!specs$denominator, zero_max = VAR_ZERO_MAX)
+
+    # calc US aggregate from states
+    x2 <- x1 %>%
+      filter(sumlevel == "040") %>%
+      summarize(
+        statecode = "00",
+        countycode = "000",
+        numerator = sum(numerator),
+        denominator = sum(denominator),
+        rawvalue = numerator / denominator
+      ) %>%
+      # add states and counties
+      bind_rows(x1) %>%
+      arrange(statecode, countycode) %>%
+      apply_suppression() %>%
+      add_col_prefix(prefix)
+  })
+
+v136_other_data <- x %>%
+  map(\(x1) select(x1, statecode, countycode, matches("(rawvalue|cilow|cihigh)"))) %>%
+  reduce(\(d1, d2) full_join(d1, d2, by = c("statecode", "countycode"))) %>%
+  arrange(statecode, countycode) %>%
+  rename_with(\(x) str_remove(x, "_rawvalue")) %>%
+  add_flag_CT() %>%
+  rename(v136_other_flag_CT = flag_CT)
+
+skimr::skim(v136_other_data)
+
+```
+
+
+```{r}
+#| echo: false
+#| eval: false
+x0 <- read_csv("measure_datasets/v136_otherdata_r2025.csv") %>%
+  arrange(statecode, countycode) %>%
+  glimpse()
+
+# without CT
+waldo::compare(
+  x0 %>% filter(statecode != "09"), 
+  v136_other_data %>% filter(statecode != "09"), 
+  tolerance = 1e-4, list_as_map = TRUE)
+
+
+```
+
 
 # v137 - LONG COMMUTE - DRIVING ALONE 
 
@@ -618,7 +722,7 @@ calc_diss_index <- function(df) {
     mutate(diss_index = replace_values(diss_index, 0 ~ NA))
 }
 
-# apply aggregated calculation at US, state and county level
+# apply aggregated calculation state and county level
 v141 <- bind_rows(
   x %>%
     group_by(statecode, countycode) %>%
@@ -626,11 +730,15 @@ v141 <- bind_rows(
   x %>%
     group_by(statecode) %>%
     calc_diss_index() %>%
-    mutate(countycode = "000"),
-  x %>%
-    calc_diss_index() %>%
-    mutate(statecode = "00", countycode = "000")
+    mutate(countycode = "000")
   ) %>%
+  # US index = median of state indexes
+  add_row(
+    statecode = "00", countycode = "000", 
+    diss_index = median(filter(., countycode == "000")$diss_index)
+  ) %>%
+  # merge full state-county table (rawvalue will be missing)
+  right_join(standard_fips, by = c("statecode", "countycode")) %>%
   arrange(statecode, countycode) %>%
   rename(v141_rawvalue = diss_index)
 
@@ -644,10 +752,15 @@ skimr::skim(v141)
 #| echo: false
 
 x0 <- read_csv("measure_datasets/v141_r2025.csv") %>%
+  select(-rawvalue) %>%
   arrange(statecode, countycode)
 
-full_join(x0, v141, by = c("statecode", "countycode")) %>%
-  filter(!util$almost_equal(v141_rawvalue.x, v141_rawvalue.y))
+# known difference in two NY counties
+waldo::compare(
+  x0 %>% filter(fipscode %notin% c("36103", "36111")), 
+  v141 %>% filter(fipscode %notin% c("36103", "36111")), 
+  tolerance = 1e-4, list_as_map = TRUE)
+
 
 ```
 
@@ -828,14 +941,16 @@ Helper code to compare new computations with old CHRR results.
 ```{r}
 #| eval: false
 
-cmp_vars <- c("statecode", "countycode", "numerator", "denominator", "rawvalue", "cilow", "cihigh")
-x0 <- read_csv("measure_datasets/v067_otherdata_r2025.csv") %>%
-  arrange(statecode, countycode)
 
-x1 <- v067_race
+x0 <- read_csv("measure_datasets/v141_r2025.csv") %>%
+  arrange(statecode, countycode) %>%
+  filter(statecode != "09")
+
+x1 <- v141 %>%
+  filter(statecode != "09")
 
 cmp <- names(x1) %>%
-  grepv("(white|black|hispanic|asian|aian)", .) %>%
+  grepv("^v136", .) %>%
   set_names() %>%
   map(\(var) {
     waldo::compare(x0[[var]], x1[[var]], tolerance = 1e-4)
@@ -843,10 +958,10 @@ cmp <- names(x1) %>%
 
 cmp
 
-x0
+
 x <- full_join(
-  select(x0, statecode, countycode, v0 = v067_race_black_cilow),
-  select(x1, statecode, countycode, v1 = v067_race_black_cilow),
+  select(x0, statecode, countycode, v0 = v136_cilow),
+  select(x1, statecode, countycode, v1 = v136_cilow),
   by = c("statecode", "countycode")
 ) %>%
   filter(!util$almost_equal(v0, v1))
@@ -856,7 +971,7 @@ raw_vars <- base::union(all.vars(numerator), all.vars(denominator)) %>%
 
 x1e <- x1 %>%
   right_join(x) %>%
-  select(all_of(raw_vars) | !starts_with(tabid))
+  select(all_of(raw_vars) | !starts_with("T2"))
 
 
 ```
