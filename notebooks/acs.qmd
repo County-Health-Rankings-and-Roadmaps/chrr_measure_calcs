@@ -29,8 +29,7 @@ Old calculations did not apply "max variance" rule for zero-valued estimates.
   - Complete, numerically equal
 
 - Driving Alone to Work (v067)
-  - Base measure complete, numerically equal
-  - Calc by race not implemented
+  - Complete, numerically equal
 
 - Some College (v069)
   - Complete, numerically equal
@@ -242,7 +241,6 @@ waldo::compare(x0, v067, tolerance = 1e-4, list_as_map = TRUE)
 
 ## v067_other - Driving Alone to Work
 
-NOT IMPLEMENTED
 
 - `race_aian`	AIAN	Percentage of American Indian and Alaska Native workers who drive alone to work	
 - `race_asian`	Asian	Percentage of Asian/Pacific Islander workers who drive alone to work
@@ -252,13 +250,84 @@ NOT IMPLEMENTED
 
 
 ```{r}
-var_ls_067_other <- c(
-  'B08505B_002E', 'B08505H_002E', 'B08505I_002E', 'B08505D_002E', 'B08505E_002E',
-  'B08505C_002E', 'B08505B_001E', 'B08505H_001E', 'B08505I_001E', 'B08505D_001E',
-  'B08505E_001E', 'B08505C_001E', 'B08505B_002M', 'B08505H_002M', 'B08505I_002M',
-  'B08505D_002M', 'B08505E_002M', 'B08505C_002M', 'B08505B_001M', 'B08505H_001M',
-  'B08505I_001M', 'B08505D_001M', 'B08505E_001M', 'B08505C_001M'
+v067_race_specs <- list(
+  black = list(
+    tabid = "B08505B",
+    numerator = expr(B08505B_002E),
+    denominator = expr(B08505B_001E)
+  ),
+  white = list(
+    tabid = "B08505H",
+    numerator = expr(B08505H_002E),
+    denominator = expr(B08505H_001E)
+  ),
+  hispanic = list(
+    tabid = "B08505I",
+    numerator = expr(B08505I_002E),
+    denominator = expr(B08505I_001E)
+  ),
+  asian = list(
+    tabid = c("B08505D", "B08505E"),
+    numerator = expr(B08505D_002E + B08505E_002E),
+    denominator = expr(B08505D_001E + B08505E_001E)
+  ),
+  aian = list(
+    tabid = "B08505C",
+    numerator = expr(B08505C_002E),
+    denominator = expr(B08505C_001E)
+  )
 )
+
+x <- v067_race_specs %>%
+  imap(\(specs, race) {
+    df <- specs$tabid %>%
+      # get one or more tables
+      map(\(tabid) get_raw_table(ACS_YEAR, tabid)) %>%
+      # join multiple tables (does nothing if only one table)
+      reduce(\(d1, d2) full_join(d1, d2, by = c("GEO_ID", "NAME", "ucgid"))) %>%
+      # convert NA to 0, which is needed for adding two variables for Asian
+      mutate(across(where(is.numeric), \(x) if_else(is.na(x), 0, x))) %>%
+      standardize_fips() %>%
+      filter(statecode != "00")
+    state_county <- df %>%
+      calc_acs_ratio(num_expr = !!specs$numerator, den_expr = !!specs$denominator)
+    us <- df %>%
+      filter(countycode == "000") %>%
+      summarize(across(matches("_.+[EM]$"), \(x) sum(x, na.rm = TRUE))) %>%
+      mutate(statecode = "00", countycode = "000") %>%
+      calc_acs_ratio(num_expr = !!specs$numerator, den_expr = !!specs$denominator) %>%
+      # no CI for us
+      mutate(cilow = NA, cihigh = NA)
+    bind_rows(state_county, us) %>%
+      arrange(statecode, countycode) %>%
+      apply_suppression() %>%
+      add_col_prefix(paste0("v067_race_", race))
+    # TODO: verify suppressions
+  })
+
+v067_race <- x %>%
+  map(\(x1) select(x1, statecode, countycode, matches("(rawvalue|cilow|cihigh)"))) %>%
+  reduce(\(d1, d2) full_join(d1, d2, by = c("statecode", "countycode"))) %>%
+  add_flag_CT() %>%
+  rename(v067_race_flag_CT = flag_CT) %>%
+  rename_with(\(x) str_sub(x, 1, -10), .cols = ends_with("rawvalue"))
+
+v067_race
+
+skimr::skim(v067_race)
+
+```
+
+
+```{r}
+#| echo: false
+#| eval: false
+x0 <- read_csv("measure_datasets/v067_otherdata_r2025.csv") %>%
+  arrange(statecode, countycode) %>%
+  glimpse()
+
+waldo::compare(x0, v067_race, tolerance = 1e-4, list_as_map = TRUE)
+
 ```
 
 
@@ -758,22 +827,15 @@ Helper code to compare new computations with old CHRR results.
 
 ```{r}
 #| eval: false
-numerator <- expr(S1501_C01_014E)
-denominator <- expr(S1501_C01_006E)
-chrr_path <- "measure_datasets/v168_r2025.csv"
-
 
 cmp_vars <- c("statecode", "countycode", "numerator", "denominator", "rawvalue", "cilow", "cihigh")
-x0 <- read_csv(chrr_path) %>%
-  arrange(statecode, countycode) %>%
-  rename_with(\(x) str_remove(x, "^v..._")) %>%
-  select(all_of(cmp_vars))
+x0 <- read_csv("measure_datasets/v067_otherdata_r2025.csv") %>%
+  arrange(statecode, countycode)
 
-x1 <- get_raw_table(ACS_YEAR, tabid) %>%
-  standardize_fips() %>% 
-  calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, zero_max = FALSE)
+x1 <- v067_race
 
-cmp <- cmp_vars[-(1:2)] %>%
+cmp <- names(x1) %>%
+  grepv("(white|black|hispanic|asian|aian)", .) %>%
   set_names() %>%
   map(\(var) {
     waldo::compare(x0[[var]], x1[[var]], tolerance = 1e-4)
@@ -781,10 +843,10 @@ cmp <- cmp_vars[-(1:2)] %>%
 
 cmp
 
-
+x0
 x <- full_join(
-  select(x0, statecode, countycode, v0 = cilow),
-  select(x1, statecode, countycode, v1 = cilow),
+  select(x0, statecode, countycode, v0 = v067_race_black_cilow),
+  select(x1, statecode, countycode, v1 = v067_race_black_cilow),
   by = c("statecode", "countycode")
 ) %>%
   filter(!util$almost_equal(v0, v1))
