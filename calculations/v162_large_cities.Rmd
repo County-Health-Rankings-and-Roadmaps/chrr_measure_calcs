@@ -1,0 +1,149 @@
+---
+title: "v162 large cities"
+author: "Hannah Olson-Williams"
+output: html_document
+---
+
+# Description 
+The total number of cities with 50,000 plus population and names of four largest cities
+
+# How are the units assigned to counties for this measure?
+Cities are assigned to counties based on fipscodes. County fipscodes come from census tract fipscodes; some cities extend into multiple counties. 
+
+# Data Source 
+ACS 2020 5-year estimates, Census Bureau's MAF TIGER System, City Health Dashboard 
+
+# Getting the data 
+List of cities with population data comes from City Health Dashboard. CHDB data is available for download from their website (may need to fill out a quick form about use of the data before downloading). https://www.cityhealthdashboard.com/data-access?chdash_survey_completed=true
+
+A crosswalk from the old CT census tracts to the new CT census tracts (that correspond with the new planning regions) can be found here: https://github.com/CT-Data-Collaborative/2022-tract-crosswalk. 
+
+# How do we calculate this measure?
+For Release 2025, the only update to this dataset was to add the new CT planning regions. This was done by crosswalking the census tract codes in the existing CHDB Geographic Identifiers 2020 v2.0 dataset to the new census tract codes that correspond with the new planning regions. 
+
+For Rankings 2024, the only update to this dataset was to add the two new AK counties (02063 and 02066) and delete the old AK county (02261). There are no large cities in these counties. No new calculations were performed. 
+
+Feb 2023 update: The city of Austin was removed from Bastrop County in the Large Cities dataset to be consistent with which counties are included in the State Capitals dataset. Bastrop County contains one census tract from the city of Austin (which is why Austin was associated with Bastrop County in the initial calculation of Large Cities), but is not included in the State Capitals dataset. Bastrop County is also not listed as a county that Austin falls within on the austintexas.gov website. This update is also reflected in the SAS program used to create this measure, which is saved on P (file path below). 
+
+Cities with population counts were requested from CHDB. Each city had a population estimate, and an associated incoporated place or county subdivision code. Incorporated place codes are 7 characters, county subdivision codes are 10 characters. Cities with a population less than 50,000 were deleted. 
+
+The CHDB Geographic Identifiers 2020 v2.0 was downloaded from the CHDB website. This file contained every census tract in every city included in CHDB, the county fipscode of the census tract, and the city's incorporated place or county subdivision code. 
+
+Cities with population data were separated into county subdivisons and incorporated places. Geographic identifiers were separated into county subdivisions and incorporated places. To determine all the counties a city was in (had census tracts in): 
+
+Concatenate incorporated place and county fipscode OR county subdivision and county fipscode.
+Delete all records with duplicate concatenated code (essentially only one census tract per county per city was retained from the geographic identifers file).
+[This results in some cities being included multiple times if they exist in multiple counties, and some counties being included multiple times if they contain more than one city]
+The population data for incorporated place cities and county subdivison cities was joined to the respective geographic identifiers. 
+
+End result: dataset containing all US counties with up to four cities per county  
+1) Drop the cities with population less than 50,000
+2) Map each remaining city to one (or more) counties that intersects it
+3) Generate a dataset of county fips and:
+    - For counties with 1, 2, 3, or 4 large cities associated, the names of those cities, and the total count of associated cities
+    - For counties with 5 or more cities associated, just the total count of associated large cities
+
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+library(here)
+```
+
+
+### standard county and state fips
+
+The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+
+```{r}
+fips <-  bind_rows(
+  read_sas(here("inputs/county_fips_with_ct_old.sas7bdat")) ,
+  read_sas(here("inputs/state_fips.sas7bdat")))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+# Load raw data 
+
+```{r}
+# this file contains a unique row for each tract 
+tracts = read.csv(here("raw_data/CHDB/CHDB_geographic_identifiers_2020_v2.0.csv"))
+
+# this file contains a unique row for each city 
+cities = read.csv(here("raw_data/CHDB/city_pop.csv"))
+
+
+```
+
+# some cleaning 
+filter out cities w less than 50,000 population 
+also remove "places" without fipscodes 
+```{r}
+cities_filtered = cities %>% filter(population>=50000)
+
+#remove HI and DC since weird fips codes and since they map directly to counties - honolulu and DC 
+chp = cities_filtered[cities_filtered$stcosub_fips == -999 & cities_filtered$county_indicator != 2 & cities_filtered$state_abbr != "DC",]
+
+# reformat the fipscodes col 
+chp$stpl_fips = stringr::str_pad(chp$stpl_fips,7,"left", "0") 
+
+```
+
+# grab state level places files from census 
+
+```{r}
+
+stabb = tolower(unique(chp$state_abbr)) #need state abbrevs to parse the census webpage 
+stfips = unique(substr(chp$stpl_fips, 1, 2))
+
+allstates = data.frame()
+
+for (i in 1:length(stabb)) {
+st = read.delim(paste0("https://www2.census.gov/geo/docs/reference/codes/files/st", stfips[i], "_", stabb[i], "_places.txt"), sep = "|", header = FALSE) #one state at a time 
+st$state_code = stringr::str_pad(st[,2], 2, "left", "0")
+st$place_code = stringr::str_pad(st[,3], 5, "left", "0")
+st$stpl_fips = paste0(st$state_code, st$place_code)
+colnames(st) = c("stabb", "v2", "v3", "placename", "v5","v6","countyname", "state_code", "place_code","stpl_fips")
+allstates = rbind(st, allstates)
+}
+
+# subset the important cols only 
+as = allstates[,c("stabb", "placename", "countyname", "state_code", "place_code", "stpl_fips")]
+
+# merge the reference places to the cities 
+mm = merge(chp, as, by = "stpl_fips", all.x = TRUE)
+mm = mm[!duplicated(mm),]
+
+antim = anti_join(chp, allstates, by = "stpl_fips")
+```
+
+
+
+
+
+
+
+
+
+
+
+# add in standardized fipscodes and rename  
+```{r}
+v167_school_segregation_fips = merge(fips, v167_school_segregation, by = c("statecode", "countycode")) %>% 
+  rename(v167_rawvalue = theil_county_final)
+```
+
+
+
+
+#save to project 
+```{r}
+readr::write_csv(v167_school_segregation_fips, file = here("measure_datasets/v167_R2025.csv"))
+
+```
+
+
+
+

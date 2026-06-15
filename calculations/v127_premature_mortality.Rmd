@@ -1,5 +1,5 @@
 ---
-title: "v001 Premature Death (YPLL) - R2025"
+title: "NCHS v127 - Premature age-adjusted mortality - R2026"
 author: "GL"
 output: html_document
 ---
@@ -14,25 +14,26 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Basic information
 
 - Description
-Years of potential life lost before age 75 per 100,000 population (age-adjusted).
+Number of deaths among residents under age 75 per 100,000 population (age-adjusted).
 
 - What is the numerator?
-The numerator is the cumulative number of years of potential life lost from deaths among county residents under age 75, over a three-year period.
+The numerator is the number of total deaths under the age of 75.
 
 - What is the denominator?
-The denominator is the aggregate population under age 75 for the three-year period.
+The denominator is the total population under the age of 75.
 
 ## Raw data access
 
-- NCHS mortality and natality data 2020-2022: the data is requested
+- NCHS mortality and natality data 2021-2023: the data is requested
 
-- Census population estimates 2020-2022 from:
-
-2020 Census Population Estimates: https://www2.census.gov/programs-surveys/popest/datasets/2010-2020/counties/asrh/CC-EST2020-ALLDATA.csv
+- Census population estimates 2021-2023 from:
 
 2021 Census Population Estimates: https://www2.census.gov/programs-surveys/popest/datasets/2020-2021/counties/asrh/cc-est2021-all.csv
 
 2022 Census Population Estimates: https://www2.census.gov/programs-surveys/popest/datasets/2020-2022/counties/asrh/cc-est2022-all.csv
+
+2023 Census Population Estimates: https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/asrh/cc-est2023-alldata.csv
+
 
 
 # import packages
@@ -47,14 +48,15 @@ library(haven)
 ```{r}
 # set up directory that holds data needed for calculations
 # NCHS mortality data, not allowed to share in GitHub
-nchs_mort_dir <- "C:/01_CHRR/data/NCHS_2023-10-04/mort2016_2021"
+nchs_mort_dir <- "D:/CHRR/mortality raw"
 
 # NCHS natality data, not allowed to share in GitHub
-nchs_nata_dir <- "C:/01_CHRR/data/NCHS_2023-10-04/nat2016_2022"
+nchs_nata_dir <- "D:/CHRR/natality raw"
 
 # Census county population estimates data
-census_pop_dir <- "C:/01_CHRR/data/Census_county_pop_est"
+census_pop_dir <- "D:/CHRR/pop raw"
 ```
+
 
 # standard county and state fips
 
@@ -77,21 +79,21 @@ fips <-  bind_rows(
 source("../scripts/nchs_measure_helpers.R")
 ```
 
-## function: process pop data for v001
+## function: process pop data for v127
 
 ```{r}
-process_pop_v001 <- function(year, by_race_TF = FALSE){
+process_pop_v127 <- function(year, by_race_TF = FALSE){
   pop <- read_census_pop(file_name = get_census_csv_file_info(year)$file_name ) %>% 
-    get_census_pop_by_agecat_race(get_census_csv_file_info(year)$year_num, by_race = by_race_TF, age_cat_version = "v001")
+    get_census_pop_by_agecat_race(get_census_csv_file_info(year)$year_num, by_race = by_race_TF, age_cat_version = "v127")
   
   return(pop)
 }
 ```
 
-## function: process mort data for v001
+## function: process mort data for v127
 
 ```{r}
-process_mort_v001 <- function(year, by_race_TF = FALSE){
+process_mort_v127 <- function(year, by_race_TF = FALSE){
   
   print(get_mort_file_name(year))
   
@@ -99,12 +101,14 @@ process_mort_v001 <- function(year, by_race_TF = FALSE){
     file_path = file.path(nchs_mort_dir, get_mort_file_name(year) ), 
     header = mort_header,
     n_max = Inf) %>% 
-    get_mort_data_by_agecat_race(df_fips=fips, by_race = by_race_TF, age_cat_version = "v001")
+    get_mort_data_by_agecat_race(df_fips=fips, by_race = by_race_TF, age_cat_version = "v127")
   
   return(mort)
 }
 
+
 ```
+
 
 # Pop data
 
@@ -115,40 +119,40 @@ process_mort_v001 <- function(year, by_race_TF = FALSE){
 - The NCHS birth data was aggregated by state, county, age category, and race/ethnicity group.
 
 ```{r}
-yrs <- c(2020:2022)
+yrs <- c(2021:2023)
 
 infant_pop <- 
   get_infant_pop(
     yrs, 
-    file.path(nchs_nata_dir, "nchs_births_2014_2022.csv"), 
+    file.path(nchs_nata_dir, "nchs_births_2017_2023.csv"), 
     by_race = FALSE) %>% 
   glimpse()
 
 infant_pop
 ```
 
-## Census pop data 2020-2022 by age cat 1-7
+## Census pop data 2021-2023 by age cat 1-8 
 
 ```{r}
-pop_agecat_1_7 <- bind_rows(
-  process_pop_v001(2020),
-  process_pop_v001(2021),
-  process_pop_v001(2022) %>% 
-    fix_CT_pop(process_pop_v001(2021))
+pop_agecat_1_8 <- bind_rows(
+  process_pop_v127(2021),
+  process_pop_v127(2022) %>% 
+    fix_CT_pop(process_pop_v127(2021)),
+  process_pop_v127(2023) %>% 
+    fix_CT_pop(process_pop_v127(2021))
   ) %>% 
   group_by(statecode, countycode, age_cat) %>% 
   summarise(pop = sum(pop, na.rm = TRUE), .groups = "drop") %>% 
   glimpse()
-
 ```
 
-## combine age cat 0 with age cat 1-7
+## combine age cat 0 with age cat 1-8
 
 ```{r}
 pop_all <- 
   bind_rows(
-    # age_cat = 2 to 7
-    pop_agecat_1_7 %>% filter(age_cat!=1),
+    # age_cat = 2 to 8
+    pop_agecat_1_8 %>% filter(age_cat!=1),
     
     # age_cat = 0
     fips %>% 
@@ -158,7 +162,7 @@ pop_all <-
       mutate(pop = if_else(is.na(pop), 0, pop)),
     
     # fixed age_cat = 1
-    pop_agecat_1_7 %>% 
+    pop_agecat_1_8 %>% 
       filter(age_cat==1) %>% 
       bind_rows(infant_pop) %>% 
       arrange(statecode, countycode, age_cat) %>% 
@@ -191,8 +195,7 @@ pop_all <- pop_all %>%
   mutate(pop = if_else(pop<0, 0, pop))
 ```
 
-
-# mortality data
+# mort data
 
 ## header
 
@@ -205,14 +208,13 @@ mort_header <- tribble(
 )
 ```
 
-## mort 2020-2022
-
+## mort 2021-2023
 ```{r}
 mort_all <- bind_rows(
-  process_mort_v001(2020), 
-  process_mort_v001(2021),
-  process_mort_v001(2022)
-  ) %>% 
+  process_mort_v127(2021),
+  process_mort_v127(2022),
+  process_mort_v127(2023)
+   ) %>% 
   group_by(statecode, countycode, age_cat) %>% 
   summarise(deaths = sum(deaths), .groups = "drop") %>% 
   filter(age_cat != 99) %>% 
@@ -225,26 +227,24 @@ mort_all <- bind_rows(
 ## merge mort and pop data
 
 ```{r}
-merged <- pop_all %>%  
+merged <- pop_all %>% 
   left_join(mort_all %>% ungroup(), 
             by = c("statecode", "countycode", "age_cat")) %>% 
-  mutate(deaths = if_else(is.na(deaths), 0, deaths)) %>% 
   glimpse()
   
 ```
 
-## add weight and years lost
+## add weight for age ajustment
 
 ```{r}
 wtd <- 258059676 # /*population under 75; Census 2000 model*/
 
 merged_2 <- merged %>% 
-  mutate(wtn = get_age_wtn(age_cat, version = "v001"),
-         yrlst = cal_years_lost_v001(age_cat)) %>% 
+  mutate(wtn = get_age_wtn(age_cat, version = "v127")) %>% 
   mutate(wt = wtn/wtd,
-         age_adj=deaths/pop*wtn/wtd*yrlst*100000,
-         no_age_adj=deaths/pop*yrlst*100000,
-         wk_var = (wt**2)*((no_age_adj**2)/(deaths)) ) %>% 
+         age_adj=deaths/pop*wtn/wtd*100000,
+         no_age_adj=deaths/pop*100000,
+         wk_var = (wt**2)*((no_age_adj**2)/(deaths))) %>% 
   group_by(statecode, countycode) %>% 
   summarise(numerator = sum(deaths, na.rm = TRUE),
             denominator = sum(pop, na.rm = TRUE),
@@ -258,50 +258,46 @@ merged_2 <- merged %>%
 ## confidence Intervals
 
 ```{r}
-v001_1 <- merged_2 %>% 
+v127_1 <- merged_2 %>% 
   mutate(cilow = rawvalue - 1.96*stdev, 
          cihigh = rawvalue + 1.96*stdev,
          relative_standard_error = (stdev/rawvalue)) %>% 
   # select(-stdev) %>% 
-  mutate(flag2 = if_else(relative_standard_error > 0.2, 
+  mutate(flag2 = if_else(relative_standard_error > 0.25, 
                          1, NA_real_)) %>% 
   mutate(flag2 = if_else(numerator < 20, 2, flag2)) %>% 
-  rename(v001_numerator = numerator, v001_denominator = denominator,
-         v001_rawvalue = rawvalue, v001_cilow = cilow, v001_cihigh= cihigh) %>% 
+  rename(v127_numerator = numerator, v127_denominator = denominator,
+         v127_rawvalue = rawvalue, v127_cilow = cilow, v127_cihigh= cihigh) %>% 
   mutate(across(starts_with("v"), ~ as.double(.x))) %>% 
   mutate(across(starts_with("v"), ~ if_else(!is.na(flag2) & flag2 == 2, 
                                             NA_real_, .x))) %>% 
-  mutate(test_cb=round((v001_rawvalue**2)/(stdev**2), digits = 0))
+  mutate(test_cb=round((v127_rawvalue**2)/(stdev**2), digits = 0))
 
-v001_1
+v127_1
 ```
 
-## calculate CI L and U for v001_numerator < 100 
+## calculate CI L and U
 
 ```{r}
-v001_2 <- v001_1 %>% 
+v127_2 <- v127_1 %>% 
   left_join(get_pois_CI(), by = c("test_cb" = "n")) %>% 
-  # mutate(flag2 = if_else(v001_numerator<20, 
-  #                        2, flag2)) %>%
-  mutate(v001_cilow = if_else(v001_numerator>=20 & v001_numerator <=99,
-                         v001_rawvalue * L, v001_cilow),
-         v001_cihigh = if_else(v001_numerator>=20 & v001_numerator <=99,
-                         v001_rawvalue * U, v001_cihigh)) %>% 
-  # mutate(v001_sourceflag = NA_real_) %>% 
-  mutate(flag2 = if_else(relative_standard_error > 0.2 & flag2!=2, 
-                         1, flag2)) %>% 
+  mutate(v127_cilow = if_else(v127_numerator>=20 & v127_numerator <=99,
+                         v127_rawvalue * L, v127_cilow),
+         v127_cihigh = if_else(v127_numerator>=20 & v127_numerator <=99,
+                         v127_rawvalue * U, v127_cihigh)) %>% 
   select(-c(relative_standard_error, test_cb, L, U)) %>% 
-  mutate(across(c(starts_with("v"), stdev), ~ if_else(!is.na(flag2) & flag2 == 2, 
+  mutate(across(starts_with("v"), ~ if_else(!is.na(flag2) & flag2 == 2, 
                                             NA_real_, .x))) %>% 
   rename(ypll_se=stdev, flag2_cb = flag2) %>% 
   # fix se for 15005
   mutate(ypll_se = if_else(statecode=="15" & countycode =="005",
                            NA_real_, ypll_se)) %>% 
-  # replace inf with NA
-  mutate(across(c(v001_rawvalue, ypll_se), ~if_else(is.infinite(.), NA, .)))
+  select(-c(ypll_se, flag2_cb)) %>% 
+  mutate(v127_sourceflag = NA_real_)
 
-v001_2
+v127_2
 ```
+
 
 # add flag_CT
 
@@ -309,12 +305,19 @@ v001_2
 - 'U' = data *unavailable* for a CT county
 
 ```{r}
-v001_3 <- v001_2 %>% 
-  add_flag_CT(vnum = "v001", old="A", new = "U")
+v127_3 <- v127_2 %>% 
+  add_flag_CT(vnum = "v127", old="A", new = "U")
 ```
+
+
+# Compare to initial calculations 
+```{r}
+compare("v127", v127_3, year = 2026)
+```
+
+
 
 # save data
 ```{r}
-save_data(v001_3, "v001")
+save_data(v127_3, "v127")
 ```
-
