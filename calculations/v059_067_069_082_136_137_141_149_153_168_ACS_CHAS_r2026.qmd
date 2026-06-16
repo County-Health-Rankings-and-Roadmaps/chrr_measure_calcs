@@ -69,7 +69,7 @@ Each measure section contains calculation details and automatically generated me
 
 library(tidyverse)
 
-source("R/acs.R")
+source("calculations/v059_067_069_082_136_137_141_149_153_168_ACS_CHAS_r2026.R")
 
 # set CHRR_YEAR to 2026 for new r2026 calculations, to 2025 for comparison against old r2025 measures
 CHRR_YEAR <- 2026
