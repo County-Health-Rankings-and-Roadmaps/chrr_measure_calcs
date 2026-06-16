@@ -1,8 +1,6 @@
 library(tidyverse)
 
 
-source("R/util.R", local = (util <- new.env()))
-
 # input paths
 ipath <- list(
   county_fips_with_ct_old = "inputs/county_fips_with_ct_old.sas7bdat",
@@ -10,16 +8,64 @@ ipath <- list(
   acs5_api_vars_ = "https://api.census.gov/data/{year}/acs/acs5/{subject}variables.json",
   acs5_api_det_ = "https://api.census.gov/data/{year}/acs/acs5?get=group({tabid})&ucgid={ucgid}&key={key}",
   acs5_api_sub_ = "https://api.census.gov/data/{year}/acs/acs5/subject?get=group({tabid})&ucgid={ucgid}&key={key}",
-  chas_ = "https://www.huduser.gov/portal/datasets/cp/{years}-{geo}-csv.zip"
+  chas_ = "https://www.huduser.gov/portal/datasets/cp/{years}-{geo}-csv.zip",
+  r2025_measure_ = "measure_datasets/{vname}_r2025.csv"
 )
 
 # output paths
 opath <- list(
-  acs5_vars_ = "data/raw/acs5/{year}_vars_{tab_type}.pq",
-  acs5_table_ = "data/raw/acs5/{year}/{tabid}{tract}.pq",
-  chas_ = "data/raw/chas/{years}-{geo}-csv.zip",
-  chrr_measure_ = "data/proc/measure/{vname}.csv"
+  acs5_vars_ = "raw_data/ACS/{year}_vars_{tab_type}.pq",
+  acs5_table_ = "raw_data/ACS/{year}/{tabid}{tract}.pq",
+  chas_ = "raw_data/CHAS/{years}-{geo}-csv.zip",
+  r2026_measure_ = "measure_datasets/{vname}_r2026.csv"
 )
+
+
+
+
+
+#' Create parent directory of given path
+#' Return back given path for convenience
+mkdir <- function(p) {
+  d <- dirname(p)
+  if (!dir.exists(d)) {
+    logger::log_debug("Creating directory {d}")
+    dir.create(d, recursive = TRUE)
+  }
+  invisible(p)
+}
+
+
+#' Return back given path, downloading file if it does not exist locally
+get_file <- function(path, url) {
+
+  if (file.exists(path)) return(path)
+
+  mkdir(path)
+
+  # Try stock download function first
+  # on Windows without mode = "wb", ZIP and XLSX files get corrupted
+  download_status <- try(utils::download.file(url, path, mode = "wb"))
+
+  # If download fails, try an alternative method
+  # if (download_status != 0) { # download_status is not always reliable, can be 0 even if download filed
+  if (!file.exists(path)) {
+    logger::log_warn("download failed, attempting alternative method... ", url)
+    req <- httr2::request(url) |>
+      httr2::req_headers(
+        `User-Agent` = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:149.0) Gecko/20100101 Firefox/149.0",
+      )        
+    resp <- httr2::req_perform(req, path)
+  }
+  if (file.exists(path)) {
+    logger::log_info("download success: ", url, " to ", path)
+    return(path)
+  } else {
+    logger::log_error('Download failed.\nYou can try to manually download the file from "{url}" to "{path}"')
+  }
+}
+
+
 
 #' URL to preview national table at data.census.gov
 data_census_gov_url <- function(year, tabid) {
@@ -53,7 +99,7 @@ get_raw_vars <- function(year, tab_type = c("B", "C", "S")) {
     bind_rows(.id = "variable")
 
   logger::log_info("Saving ACS-5 {year} variable definitions for table type {tab_type} to cache {cache_path}")
-  arrow::write_parquet(df, util$mkdir(cache_path))
+  arrow::write_parquet(df, mkdir(cache_path))
   df
 
 }
@@ -131,7 +177,7 @@ get_raw_table <- function(year, tabid, tract = FALSE) {
     bind_rows()
   
   logger::log_info("Saving ACS-5 {year} table {tabid} to cache {cache_path}")
-  arrow::write_parquet(df, util$mkdir(cache_path))
+  arrow::write_parquet(df, mkdir(cache_path))
   df
 }
 
@@ -139,7 +185,7 @@ get_raw_table <- function(year, tabid, tract = FALSE) {
 get_raw_chas <- function(year, geo = c("040", "050"), table) {
   geo <- rlang::arg_match(geo)
   years <- paste0(year - 4, "thru", year)
-  chas <- util$get_file(str_glue(opath$chas_), str_glue(ipath$chas_))
+  chas <- get_file(str_glue(opath$chas_), str_glue(ipath$chas_))
   read_csv(unz(chas, str_glue("{geo}/{table}.csv")), show_col_types = FALSE)
 }
 
@@ -196,8 +242,9 @@ add_flag_CT <- function(df, vnum, old = "U", new = "A") {
 #' Estimate needs to be of a ratio form (v1E + v2E + ...) / (v11E + v12E + ...)
 #' Numerator and denominator are passed as expressions
 #' MOE columns are identified from estimate column name stubs
-#' zero_max applies "maximum varience among zero estimates" Census recommendation to variance calculation
-calc_acs_ratio <- function(data, num_expr, den_expr, zero_max = TRUE) {
+#' refined_variance applies "maximum varience among zero estimates" Census recommendation to variance calculation
+#' and treats controlled estimates variance (code -555555555) as zero
+calc_acs_ratio <- function(data, num_expr, den_expr, refined_variance = FALSE) {
   # Capture the expressions as quosures
   num_enq <- enquo(num_expr)
   den_enq <- enquo(den_expr)
@@ -214,13 +261,14 @@ calc_acs_ratio <- function(data, num_expr, den_expr, zero_max = TRUE) {
     # Identify corresponding MOE columns
     moe_vars <- str_replace(vars, "E$", "M")
     
-    # Extract as matrices for fast matrix math, replacing special values with NA
+    # Extract as matrices for fast matrix math
     V_mat <- as.matrix(df[moe_vars])
-    V_mat[V_mat %in% c(-555555555)] <- NA
+    # replace controlled estimate MOE with 0 or NA
+    V_mat[V_mat %in% c(-555555555)] <- ifelse(refined_variance, 0, NA)
     V_mat <- (V_mat / 1.645)^2
 
     # No special treatment of zero estimate variances
-    if (!zero_max) {
+    if (!refined_variance) {
       return(rowSums(V_mat))
     }
 
