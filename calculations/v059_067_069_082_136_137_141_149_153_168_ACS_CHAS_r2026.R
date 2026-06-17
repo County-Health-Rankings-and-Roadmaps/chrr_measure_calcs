@@ -1,3 +1,8 @@
+# This script contains helper functions to support calculation of 10 r2026 measures from ACS and CHAS.
+# It is imported and used in a corresponding .qmd notebook of the same name.
+# Some funcions are general purpose and can be used in other calculations.
+
+
 library(tidyverse)
 
 
