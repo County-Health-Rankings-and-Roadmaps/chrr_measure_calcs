@@ -9,3 +9,23 @@ scripts/v127*
 scripts/v129*
 temp/
 raw_data/HIFLD/googledrive
+data/
+
+# binary raw data
+raw_data/ACS/*.pq
+raw_data/ACS/2023/*.pq
+raw_data/ACS/2024/*.pq
+raw_data/CHAS/*-csv.zip
+
+# R configuration and environment
+.Rprofile
+renv/
+.positai/
+
+# environment file with secrets
+.Renviron
+
+# Quarto notebooks
+/.quarto/
+**/*.quarto_ipynb
+*.html
