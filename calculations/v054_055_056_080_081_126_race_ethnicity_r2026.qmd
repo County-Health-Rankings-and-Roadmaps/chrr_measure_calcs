@@ -1,0 +1,349 @@
+---
+title: "v054, v055, v056, v080, v081, v126 - R2026"
+format:
+  html:
+    author: Anton Babkin
+    date: today
+    toc: true
+    toc-depth: 2
+    embed-resources: true
+    code-fold: true
+    code-overflow: wrap
+    df-print: kable
+---
+
+
+# About
+
+This notebook calculates the following demographic variables.
+
+- v054, % Non-Hispanic Black
+- v055, % American Indian & Alaska Native
+- v056, % Hispanic
+- v080, % Native Hawaiian/Other Pacific Islander
+- v081, % Asian
+- v126, % Non-Hispanic White
+
+# Import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+
+source("calculations/helpers.R", local = (helpers <- new.env()))
+
+# set CHRR_YEAR to 2026 for new r2026 calculations, to 2025 for comparison against old r2025 measures
+CHRR_YEAR <- 2025
+POPEST_YEAR <- CHRR_YEAR - 2
+
+# set to FALSE to run calculations without saving measures to disk
+SAVE_MEASURES <- TRUE
+
+# calculated measures dataframes
+measures <- list()
+
+# input paths
+ipath <- list(
+  alldata_ = "https://www2.census.gov/programs-surveys/popest/datasets/2020-{POPEST_YEAR}/counties/asrh/cc-est{POPEST_YEAR}-alldata.csv",
+  r2025_measure_ = "measure_datasets/{vname}_r2025.csv"
+)
+
+# output paths
+opath <- list(
+  r2026_measure_ = "measure_datasets/{vname}_r2026.csv"
+)
+
+
+```
+
+
+
+# Prepare data
+
+- Website to downloaded data
+
+`cc-est2023-all.csv`
+
+https://www2.census.gov/programs-surveys/popest/datasets/2020-2023
+
+- Online documentation
+
+https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2020-2023/CC-EST2023-ALLDATA.pdf
+
+## import Census pop data
+
+data: https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/asrh/cc-est2023-alldata.csv
+
+```{r}
+df_raw <- str_glue(ipath$alldata_) %>%
+  read_csv() %>%
+  rename_with(tolower)
+
+df_raw %>%
+  head()
+```
+
+
+## process data
+
+STATE: State FIPS code
+COUNTY: County FIPS code
+YEAR: Year
+AGEGRP: Age Group
+TOT_POP: Total population
+NHBA_MALE: Not Hispanic, Black or African American alone male population
+NHBA_FEMALE: Not Hispanic, Black or African American alone female population
+NHWA_MALE: Not Hispanic, White alone male population
+NHWA_FEMALE: Not Hispanic, White alone female population
+IA_MALE: American Indian and Alaska Native alone male population 
+IA_FEMALE: American Indian and Alaska Native alone female population
+AA_MALE: Asian alone male population
+AA_FEMALE: Asian alone female population
+NA_MALE: Native Hawaiian and Other Pacific Islander alone male population
+NA_FEMALE: Native Hawaiian and Other Pacific Islander alone female population
+H_MALE: Hispanic male population
+H_FEMALE: Hispanic female population
+
+
+```{r}
+df_proc <- list()
+
+pop_vars <- c(
+  "tot_pop", 
+  "nhba_male", "nhba_female", "nhwa_male", "nhwa_female",
+  "ia_male", "ia_female", "aa_male", "aa_female",
+  "na_male", "na_female", "h_male", "h_female")
+
+year_code <- switch(
+  as.character(POPEST_YEAR), 
+  `2023` = 5, # 7/1/2023 population estimate
+  `2024` = 6  # 7/1/2024 population estimate
+)
+
+df_proc$county <- df_raw %>% 
+  # agegrp == 0: total
+  filter(year == year_code, agegrp == 0) %>%  
+  select(sumlev, state, county, all_of(pop_vars))
+
+df_proc$state <- df_proc$county %>%
+  summarize(
+    across(all_of(pop_vars), \(x) sum(x, na.rm = TRUE)),
+    .by = "state"
+  ) %>%
+  mutate(sumlev = "040", county = "000")
+
+df_proc$us <- df_proc$state %>%
+  summarize(
+    across(all_of(pop_vars), \(x) sum(x, na.rm = TRUE))
+  ) %>%
+  mutate(sumlev = "010", state = "00", county = "000")
+
+df_proc <- df_proc %>%
+  bind_rows() %>%
+  arrange(state, county) %>%
+  # construct partial UCGID (GEOID) to work with standardize_fips()
+  mutate(ucgid = paste0(sumlev, "------", state, county), .before = 1) %>%
+  helpers$standardize_fips() %>%
+  select(statecode, countycode, all_of(pop_vars)) %>%
+  helpers$add_flag_CT(old = "U", new = "A")
+
+skimr::skim(df_proc)
+
+```
+
+
+# Calculate measures
+
+## v054 - % Non-Hispanic Black
+
+```{r}
+vname <- "v054"
+measures[[vname]] <- df_proc %>%
+  mutate(
+    numerator = nhba_male + nhba_female,
+    denominator = tot_pop,
+    rawvalue = numerator / denominator
+    ) %>%
+  select(statecode, countycode, rawvalue, numerator, denominator, flag_CT) %>%
+  helpers$add_col_prefix(vname)
+
+skimr::skim(measures[[vname]])
+
+if (SAVE_MEASURES && CHRR_YEAR == 2026) {
+  save_to <- str_glue(opath$r2026_measure_)
+  write_csv(measures[[vname]], save_to, na = "")
+  logger::log_info("{vname} saved to {save_to}")
+}
+
+if (CHRR_YEAR == 2025) {
+  x0 <- str_glue(ipath$r2025_measure_) %>%
+    read_csv(show_col_types = FALSE) %>%
+    arrange(statecode, countycode)
+  x1 <- measures[[vname]]
+  waldo::compare(x0, x1, tolerance = 1e-4, list_as_map = TRUE)
+}
+
+```
+
+
+## v055 - % American Indian & Alaska Native
+
+```{r}
+vname <- "v055"
+measures[[vname]] <- df_proc %>%
+  mutate(
+    numerator = ia_male + ia_female,
+    denominator = tot_pop,
+    rawvalue = numerator / denominator
+    ) %>%
+  select(statecode, countycode, rawvalue, numerator, denominator, flag_CT) %>%
+  helpers$add_col_prefix(vname)
+
+skimr::skim(measures[[vname]])
+
+if (SAVE_MEASURES && CHRR_YEAR == 2026) {
+  save_to <- str_glue(opath$r2026_measure_)
+  write_csv(measures[[vname]], save_to, na = "")
+  logger::log_info("{vname} saved to {save_to}")
+}
+
+if (CHRR_YEAR == 2025) {
+  x0 <- str_glue(ipath$r2025_measure_) %>%
+    read_csv(show_col_types = FALSE) %>%
+    arrange(statecode, countycode)
+  x1 <- measures[[vname]]
+  waldo::compare(x0, x1, tolerance = 1e-4, list_as_map = TRUE)
+}
+
+```
+
+
+## v056 - % Hispanic
+
+```{r}
+vname <- "v056"
+measures[[vname]] <- df_proc %>%
+  mutate(
+    numerator = h_male + h_female,
+    denominator = tot_pop,
+    rawvalue = numerator / denominator
+    ) %>%
+  select(statecode, countycode, rawvalue, numerator, denominator, flag_CT) %>%
+  helpers$add_col_prefix(vname)
+
+skimr::skim(measures[[vname]])
+
+if (SAVE_MEASURES && CHRR_YEAR == 2026) {
+  save_to <- str_glue(opath$r2026_measure_)
+  write_csv(measures[[vname]], save_to, na = "")
+  logger::log_info("{vname} saved to {save_to}")
+}
+
+if (CHRR_YEAR == 2025) {
+  x0 <- str_glue(ipath$r2025_measure_) %>%
+    read_csv(show_col_types = FALSE) %>%
+    arrange(statecode, countycode)
+  x1 <- measures[[vname]]
+  waldo::compare(x0, x1, tolerance = 1e-4, list_as_map = TRUE)
+}
+
+```
+
+
+## v080 - % Native Hawaiian/Other Pacific Islander
+
+```{r}
+vname <- "v080"
+measures[[vname]] <- df_proc %>%
+  mutate(
+    numerator = na_male + na_female,
+    denominator = tot_pop,
+    rawvalue = numerator / denominator
+    ) %>%
+  select(statecode, countycode, rawvalue, numerator, denominator, flag_CT) %>%
+  helpers$add_col_prefix(vname)
+
+skimr::skim(measures[[vname]])
+
+if (SAVE_MEASURES && CHRR_YEAR == 2026) {
+  save_to <- str_glue(opath$r2026_measure_)
+  write_csv(measures[[vname]], save_to, na = "")
+  logger::log_info("{vname} saved to {save_to}")
+}
+
+if (CHRR_YEAR == 2025) {
+  x0 <- str_glue(ipath$r2025_measure_) %>%
+    read_csv(show_col_types = FALSE) %>%
+    arrange(statecode, countycode)
+  x1 <- measures[[vname]]
+  waldo::compare(x0, x1, tolerance = 1e-4, list_as_map = TRUE)
+}
+
+```
+
+
+## v081 - % Asian
+
+```{r}
+vname <- "v081"
+measures[[vname]] <- df_proc %>%
+  mutate(
+    numerator = aa_male + aa_female,
+    denominator = tot_pop,
+    rawvalue = numerator / denominator
+    ) %>%
+  select(statecode, countycode, rawvalue, numerator, denominator, flag_CT) %>%
+  helpers$add_col_prefix(vname)
+
+skimr::skim(measures[[vname]])
+
+if (SAVE_MEASURES && CHRR_YEAR == 2026) {
+  save_to <- str_glue(opath$r2026_measure_)
+  write_csv(measures[[vname]], save_to, na = "")
+  logger::log_info("{vname} saved to {save_to}")
+}
+
+if (CHRR_YEAR == 2025) {
+  x0 <- str_glue(ipath$r2025_measure_) %>%
+    read_csv(show_col_types = FALSE) %>%
+    arrange(statecode, countycode)
+  x1 <- measures[[vname]]
+  waldo::compare(x0, x1, tolerance = 1e-4, list_as_map = TRUE)
+}
+
+```
+
+
+
+## v126 - % Non-Hispanic White
+
+```{r}
+vname <- "v126"
+measures[[vname]] <- df_proc %>%
+  mutate(
+    numerator = nhwa_male + nhwa_female,
+    denominator = tot_pop,
+    rawvalue = numerator / denominator
+    ) %>%
+  select(statecode, countycode, rawvalue, numerator, denominator, flag_CT) %>%
+  helpers$add_col_prefix(vname)
+
+skimr::skim(measures[[vname]])
+
+if (SAVE_MEASURES && CHRR_YEAR == 2026) {
+  save_to <- str_glue(opath$r2026_measure_)
+  write_csv(measures[[vname]], save_to, na = "")
+  logger::log_info("{vname} saved to {save_to}")
+}
+
+if (CHRR_YEAR == 2025) {
+  x0 <- str_glue(ipath$r2025_measure_) %>%
+    read_csv(show_col_types = FALSE) %>%
+    arrange(statecode, countycode)
+  x1 <- measures[[vname]]
+  waldo::compare(x0, x1, tolerance = 1e-4, list_as_map = TRUE)
+}
+
+```
+
+
