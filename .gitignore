@@ -20,7 +20,7 @@ raw_data/CHAS/*-csv.zip
 # R configuration and environment
 .Rprofile
 renv/
-.positai/
+.posit/
 
 # environment file with secrets
 .Renviron

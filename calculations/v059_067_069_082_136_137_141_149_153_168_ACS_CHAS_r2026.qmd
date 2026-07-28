@@ -192,11 +192,11 @@ var_meta_table(numerator = numerator, denominator = denominator)
 
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
-  standardize_fips() %>% 
-  add_flag_CT() %>%
+  helpers$standardize_fips() %>% 
+  helpers$add_flag_CT() %>%
   calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, refined_variance = REFINED_VARIANCE) %>%
-  apply_suppression() %>%
-  add_col_prefix(vname) %>%
+  helpers$apply_suppression() %>%
+  helpers$add_col_prefix(vname) %>%
   arrange(statecode, countycode)
 
 measures[[vname]] <- x %>%
@@ -270,11 +270,11 @@ var_meta_table(numerator = numerator, denominator = denominator)
 
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
-  standardize_fips() %>% 
-  add_flag_CT() %>%
+  helpers$standardize_fips() %>% 
+  helpers$add_flag_CT() %>%
   calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, refined_variance = REFINED_VARIANCE) %>%
-  apply_suppression() %>%
-  add_col_prefix(vname)
+  helpers$apply_suppression() %>%
+  helpers$add_col_prefix(vname)
 
 measures[[vname]] <- x %>%
   select(statecode, countycode, starts_with(vname))
@@ -362,7 +362,7 @@ x <- v067_race_specs %>%
       reduce(\(d1, d2) full_join(d1, d2, by = c("GEO_ID", "NAME", "ucgid"))) %>%
       # convert NA to 0, which is needed for adding two variables for Asian
       mutate(across(where(is.numeric), \(x) if_else(is.na(x), 0, x))) %>%
-      standardize_fips() %>%
+      helpers$standardize_fips() %>%
       filter(statecode != "00")
     state_county <- df %>%
       calc_acs_ratio(num_expr = !!specs$numerator, den_expr = !!specs$denominator)
@@ -375,15 +375,15 @@ x <- v067_race_specs %>%
       mutate(cilow = NA, cihigh = NA)
     bind_rows(state_county, us) %>%
       arrange(statecode, countycode) %>%
-      apply_suppression() %>%
-      add_col_prefix(paste0("v067_race_", race))
+      helpers$apply_suppression() %>%
+      helpers$add_col_prefix(paste0("v067_race_", race))
   })
 
 measures[[vname]] <- x %>%
   map(\(x1) select(x1, statecode, countycode, matches("(rawvalue|cilow|cihigh)"))) %>%
   reduce(\(d1, d2) full_join(d1, d2, by = c("statecode", "countycode"))) %>%
   rename_with(\(x) str_remove(x, "_rawvalue")) %>%
-  add_flag_CT() %>%
+  helpers$add_flag_CT() %>%
   rename(v067_race_flag_CT = flag_CT)
 
 skimr::skim(measures[[vname]])
@@ -473,11 +473,11 @@ var_meta_table(numerator = numerator, denominator = denominator)
 
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
-  standardize_fips() %>% 
-  add_flag_CT() %>%
+  helpers$standardize_fips() %>% 
+  helpers$add_flag_CT() %>%
   calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, refined_variance = REFINED_VARIANCE) %>%
-  apply_suppression() %>%
-  add_col_prefix(vname)
+  helpers$apply_suppression() %>%
+  helpers$add_col_prefix(vname)
 
 measures[[vname]] <- x %>%
   select(statecode, countycode, starts_with(vname))
@@ -551,10 +551,10 @@ data.frame(term = c("numerator", "denominator"),
 var_meta_table(numerator = numerator, denominator = denominator)
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
-  standardize_fips() %>% 
-  add_flag_CT() %>%
+  helpers$standardize_fips() %>% 
+  helpers$add_flag_CT() %>%
   calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, refined_variance = REFINED_VARIANCE) %>%
-  apply_suppression()
+  helpers$apply_suppression()
 
 # original r2025 edge-case code, might want to generalize to work with any zero values
 if (CHRR_YEAR == 2025) {
@@ -568,7 +568,7 @@ if (CHRR_YEAR == 2025) {
 }
 
 x <- x %>%
-  add_col_prefix(vname)
+  helpers$add_col_prefix(vname)
 
 measures[[vname]] <- x %>%
   select(statecode, countycode, starts_with(vname))
@@ -628,9 +628,9 @@ x1 <- bind_rows(
   get_raw_chas(CHAS_YEAR, "040", "Table2")
 ) %>%
   rename(ucgid = geoid) %>%
-  standardize_fips() %>%
+  helpers$standardize_fips() %>%
   filter(statecode != "00") %>%
-  add_flag_CT() %>%
+  helpers$add_flag_CT() %>%
   rename_with(\(x) {
     ifelse(substr(x, 4, 6) == "est", sub("est(.+)$", "\\1E", x), sub("moe(.+)$", "\\1M", x))
   }, .cols = starts_with("T2_")) %>%
@@ -648,8 +648,8 @@ x2 <- x1 %>%
   ) %>%
   bind_rows(x1) %>%
   arrange(statecode, countycode) %>%
-  apply_suppression() %>%
-  add_col_prefix(vname)
+  helpers$apply_suppression() %>%
+  helpers$add_col_prefix(vname)
 
 measures[[vname]] <- x2 %>%
   select(statecode, countycode, starts_with(vname))
@@ -735,7 +735,7 @@ x <- v136_other_data_specs %>%
       get_raw_chas(CHAS_YEAR, "040", specs$tabid)
     ) %>%
       rename(ucgid = geoid) %>%
-      standardize_fips() %>%
+      helpers$standardize_fips() %>%
       filter(statecode != "00") %>%
       rename_with(\(x) str_replace_all(x, c("est(.+)$" = "\\1E", "moe(.+)$" = "\\1M"))) %>%
       calc_acs_ratio(num_expr = !!specs$numerator, den_expr = !!specs$denominator, refined_variance = REFINED_VARIANCE)
@@ -753,8 +753,8 @@ x <- v136_other_data_specs %>%
       # add states and counties
       bind_rows(x1) %>%
       arrange(statecode, countycode) %>%
-      apply_suppression() %>%
-      add_col_prefix(prefix)
+      helpers$apply_suppression() %>%
+      helpers$add_col_prefix(prefix)
   })
 
 measures[[vname]] <- x %>%
@@ -762,7 +762,7 @@ measures[[vname]] <- x %>%
   reduce(\(d1, d2) full_join(d1, d2, by = c("statecode", "countycode"))) %>%
   arrange(statecode, countycode) %>%
   rename_with(\(x) str_remove(x, "_rawvalue")) %>%
-  add_flag_CT() %>%
+  helpers$add_flag_CT() %>%
   rename(v136_other_flag_CT = flag_CT)
 
 skimr::skim(measures[[vname]])
@@ -841,8 +841,8 @@ data.frame(term = c("rawvalue", "denominator"),
 var_meta_table(rawvalue = rawvalue, denominator = denominator)
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
-  standardize_fips() %>% 
-  add_flag_CT() %>%
+  helpers$standardize_fips() %>% 
+  helpers$add_flag_CT() %>%
   # no ratio, using general function to handle variance calc with numerator aggregation formula
   calc_acs_ratio(num_expr = !!rawvalue, den_expr = !!denominator, refined_variance = REFINED_VARIANCE) %>%
   mutate(
@@ -856,8 +856,8 @@ x <- get_raw_table(ACS_YEAR, tabid) %>%
     cilow = rawvalue - moe, 
     cihigh = rawvalue + moe
   ) %>%
-  apply_suppression() %>%
-  add_col_prefix(vname)
+  helpers$apply_suppression() %>%
+  helpers$add_col_prefix(vname)
 
 measures[[vname]] <- x %>%
   select(statecode, countycode, starts_with(vname))
@@ -924,7 +924,7 @@ x <- full_join(
     get_raw_table(ACS_YEAR, tabid[2], tract = TRUE) %>% select(ucgid, blk = B11002B_001E),
     by = "ucgid"
   ) %>%
-  standardize_fips() %>%
+  helpers$standardize_fips() %>%
   # only keep tract-level observations
   filter(str_sub(ucgid, 1, 3) == "140")
 
@@ -1047,11 +1047,11 @@ var_meta_table(numerator = numerator, denominator = denominator)
 
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
-  standardize_fips() %>% 
-  add_flag_CT() %>%
+  helpers$standardize_fips() %>% 
+  helpers$add_flag_CT() %>%
   # calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator, zero_max = FALSE) %>%
   calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator) %>%
-  apply_suppression() %>%
+  helpers$apply_suppression() %>%
   # could go inside apply_suppresion?
   mutate(
     rawvalue = case_when(
@@ -1064,7 +1064,7 @@ x <- get_raw_table(ACS_YEAR, tabid) %>%
   ) %>%
   mutate(across(c(numerator, denominator, cilow, cihigh), 
                 ~if_else(is.na(rawvalue), NA_real_, .x))) %>% 
-  add_col_prefix(vname)
+  helpers$add_col_prefix(vname)
 
 measures[[vname]] <- x %>%
   select(statecode, countycode, starts_with(vname))
@@ -1118,10 +1118,10 @@ var_meta_table(numerator = numerator, denominator = denominator)
 
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
-  standardize_fips() %>% 
+  helpers$standardize_fips() %>% 
   calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator) %>%
-  apply_suppression() %>%
-  add_col_prefix(vname)
+  helpers$apply_suppression() %>%
+  helpers$add_col_prefix(vname)
 
 measures[[vname]] <- x %>%
   select(statecode, countycode, starts_with(vname))
@@ -1195,11 +1195,11 @@ var_meta_table(numerator = numerator, denominator = denominator)
 
 
 x <- get_raw_table(ACS_YEAR, tabid) %>%
-  standardize_fips() %>% 
-  add_flag_CT() %>%
+  helpers$standardize_fips() %>% 
+  helpers$add_flag_CT() %>%
   calc_acs_ratio(num_expr = !!numerator, den_expr = !!denominator) %>%
-  apply_suppression() %>%
-  add_col_prefix(vname)
+  helpers$apply_suppression() %>%
+  helpers$add_col_prefix(vname)
 
 measures[[vname]] <- x %>%
   select(statecode, countycode, starts_with(vname))
