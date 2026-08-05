@@ -29,13 +29,18 @@ library(tidyverse)
 library(haven)
 
 source("calculations/helpers.R", local = (helpers <- new.env()))
+helpers$logger_config(stderr = TRUE, stdout = FALSE)
 
 # set CHRR_YEAR to 2026 for new r2026 calculations, to 2025 for comparison against old r2025 measures
-CHRR_YEAR <- 2025
+CHRR_YEAR <- 2026
 POPEST_YEAR <- CHRR_YEAR - 2
 
 # set to FALSE to run calculations without saving measures to disk
 SAVE_MEASURES <- TRUE
+# upload raw and processed files to S3
+SAVE_TO_S3 <- TRUE
+# read raw files from S3
+READ_FROM_S3 <- TRUE
 
 # calculated measures dataframes
 measures <- list()
@@ -48,10 +53,12 @@ ipath <- list(
 
 # output paths
 opath <- list(
+  agesex_ = "raw_data/USCB/cc-est{POPEST_YEAR}-agesex-all.csv",
   r2026_measure_ = "measure_datasets/{vname}_r2026.csv"
 )
 
 ```
+
 
 # Prepare data
 
@@ -74,8 +81,14 @@ data: https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/countie
 
 ```{r}
 
-df_raw <- str_glue(ipath$agesex_) %>%
-  read_csv() %>%
+raw_file <- helpers$get_file(
+  path = str_glue(opath$agesex_), 
+  url = str_glue(ipath$agesex_),
+  s3_read = READ_FROM_S3,
+  s3_write = SAVE_TO_S3
+)
+
+df_raw <- read_csv(raw_file) %>%
   rename_with(tolower)
 
 df_raw %>%
@@ -147,8 +160,8 @@ skimr::skim(measures[[vname]])
 
 if (SAVE_MEASURES && CHRR_YEAR == 2026) {
   save_to <- str_glue(opath$r2026_measure_)
-  write_csv(measures[[vname]], save_to, na = "")
-  logger::log_info("{vname} saved to {save_to}")
+  helpers$save_to_file(measures[[vname]], save_to)
+  if (SAVE_TO_S3) helpers$save_to_s3(save_to)
 }
 
 if (CHRR_YEAR == 2025) {
@@ -179,8 +192,8 @@ skimr::skim(measures[[vname]])
 
 if (SAVE_MEASURES && CHRR_YEAR == 2026) {
   save_to <- str_glue(opath$r2026_measure_)
-  write_csv(measures[[vname]], save_to, na = "")
-  logger::log_info("{vname} saved to {save_to}")
+  helpers$save_to_file(measures[[vname]], save_to)
+  if (SAVE_TO_S3) helpers$save_to_s3(save_to)
 }
 
 if (CHRR_YEAR == 2025) {
@@ -207,13 +220,12 @@ measures[[vname]] <- df_proc %>%
   select(statecode, countycode, rawvalue, numerator, denominator, flag_CT) %>%
   helpers$add_col_prefix(vname)
 
-
 skimr::skim(measures[[vname]])
 
 if (SAVE_MEASURES && CHRR_YEAR == 2026) {
   save_to <- str_glue(opath$r2026_measure_)
-  write_csv(measures[[vname]], save_to, na = "")
-  logger::log_info("{vname} saved to {save_to}")
+  helpers$save_to_file(measures[[vname]], save_to)
+  if (SAVE_TO_S3) helpers$save_to_s3(save_to)
 }
 
 if (CHRR_YEAR == 2025) {
@@ -245,8 +257,8 @@ skimr::skim(measures[[vname]])
 
 if (SAVE_MEASURES && CHRR_YEAR == 2026) {
   save_to <- str_glue(opath$r2026_measure_)
-  write_csv(measures[[vname]], save_to, na = "")
-  logger::log_info("{vname} saved to {save_to}")
+  helpers$save_to_file(measures[[vname]], save_to)
+  if (SAVE_TO_S3) helpers$save_to_s3(save_to)
 }
 
 if (CHRR_YEAR == 2025) {

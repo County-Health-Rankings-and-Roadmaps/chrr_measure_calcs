@@ -12,6 +12,23 @@ ipath <- list(
 )
 
 
+#' Configure write channels for the "logger" messages
+#' stderr is seen in console output, stdout in rendered notebooks
+logger_config <- function(stderr = TRUE, stdout = FALSE) {
+  if (stderr && !stdout) {
+    logger::log_appender(logger::appender_stderr)
+  } else if (!stderr && stdout) {
+    logger::log_appender(logger::appender_stdout)
+  } else if (stderr && stdout) {
+    logger::log_appender(function(lines) {
+      logger::appender_stdout(lines)
+      logger::appender_stderr(lines)
+    })
+  }
+}
+
+
+
 #' Create parent directory of given path
 #' Return back given path for convenience
 mkdir <- function(p) {
@@ -27,11 +44,23 @@ mkdir <- function(p) {
 
 
 #' Return back given path, downloading file if it does not exist locally
-get_file <- function(path, url) {
+#' If local file does not exist and `s3_read == TRUE`, try downloading file from S3 before hitting source URL
+#' If `s3_write` then file is saved to S3 after download
+get_file <- function(path, url, s3_read = FALSE, s3_write = FALSE) {
 
-  if (file.exists(path)) return(path)
+  if (file.exists(path)) {
+    logger::log_info("Found local file at ", path)
+    # write backup file to S3
+    if (s3_write) save_to_s3(path)
+    return(path)
+  }
+
+  logger::log_info("Local file not found, proceeding to download ", path)
 
   mkdir(path)
+
+  # attempt to download backup file from S3
+  if (s3_read && get_s3_file(path)) return(path)
 
   # Try stock download function first
   # on Windows without mode = "wb", ZIP and XLSX files get corrupted
@@ -49,14 +78,70 @@ get_file <- function(path, url) {
   }
   if (file.exists(path)) {
     logger::log_info("download success: ", url, " to ", path)
+    # write backup file to S3
+    if (s3_write) save_to_s3(path)
     return(path)
   } else {
     logger::log_error('Download failed.\nYou can try to manually download the file from "{url}" to "{path}"')
+    stop()
   }
 }
 
 
 
+#' Write object to disk and cloud storage
+#' `path` must be relative to working directory
+save_to_file <- function(object, path) {
+  if (file.exists(path)) logger::log_info("Overwriting local file ", path)
+  if (str_ends(path, "\\.csv")) {
+    write_csv(object, path, na = "")
+  } else if (str_ends(path, "\\.(pq|parquet)")) {
+    arrow::write_parquet(object, path)
+  }
+  logger::log_info("Saved local file ", path)
+}
+
+
+#' Download file from S3
+#' Returns TRUE if file was successfully downloaded, otherwise FALSE
+get_s3_file <- function(path) {
+  if (any(Sys.getenv(c("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")) == "")) {
+    logger::log_error("AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY env variable not set, aborting S3 upload.")
+    return()
+  }
+  Sys.setenv(AWS_S3_ENDPOINT = "s3.wisc.edu", AWS_DEFAULT_REGION = "web")
+  bucket <- "countyhealthrankings"
+  
+  if (suppressMessages(aws.s3::object_exists(path, bucket))) {
+    if (file.exists(path)) logger::log_info("Overwriting local file ", path)
+    aws.s3::save_object(object = path, bucket = bucket, file = path, show_progress = TRUE)
+    if (file.exists(path)) {
+      logger::log_info("Downloaded S3 file ", path)
+      return(TRUE)
+    }
+  } else {
+    logger::log_info("S3 file not found ", path)
+  }
+  FALSE
+}
+
+
+
+#' Upload file to S3
+save_to_s3 <- function(path, public = FALSE) {
+  stopifnot(file.exists(path))
+  if (any(Sys.getenv(c("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")) == "")) {
+    logger::log_error("AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY env variable not set, aborting S3 upload.")
+    return()
+  }
+  Sys.setenv(AWS_S3_ENDPOINT = "s3.wisc.edu", AWS_DEFAULT_REGION = "web")
+  bucket <- "countyhealthrankings"
+  
+  if (suppressMessages(aws.s3::object_exists(path, bucket))) logger::log_info("Overwriting S3 file ", path)
+  logger::log_info("Uploading to S3 file ", path)
+  aws.s3::put_object(object = path, file = path, bucket = bucket, acl = "public-read", show_progress = TRUE)
+  logger::log_info("Saved S3 file ", path)
+}
 
 
 
@@ -124,4 +209,6 @@ apply_suppression <- function(df) {
                         TRUE ~ cihigh)
     )
 }
+
+
 
