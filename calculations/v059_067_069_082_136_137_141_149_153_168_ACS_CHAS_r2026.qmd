@@ -946,6 +946,11 @@ calc_diss_index <- function(df) {
     mutate(diss_index = replace_values(diss_index, 0 ~ NA))
 }
 
+standard_fips <- bind_rows(
+  haven::read_sas(helpers$ipath$county_fips_with_ct_old),
+  haven::read_sas(helpers$ipath$state_fips)
+)
+
 # apply aggregated calculation at state and county level
 measures[[vname]] <- bind_rows(
   x %>%
