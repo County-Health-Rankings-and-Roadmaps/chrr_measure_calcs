@@ -24,7 +24,19 @@ This notebook calculates the following demographic variables.
 - v081, % Asian
 - v126, % Non-Hispanic White
 
-# Import packages
+## Running this notebook
+
+Code in this notebook can be run top to bottom.
+Some aspects of execution can be controlled by setting parameter variables in the first configuration code chunk.
+
+Data are automatically downloaded, saved and uploaded, according to parameter settings:
+
+- `SAVE_MEASURES`: save R2026 measures to CSV files after calculation.
+- `SAVE_TO_S3`: upload a copy of raw data and calculated measures to S3 storage, requires credentials.
+- `READ_FROM_S3`: download raw data from S3 backup instead of original source.
+
+
+# Configuration and packages
 
 ```{r}
 library(tidyverse)

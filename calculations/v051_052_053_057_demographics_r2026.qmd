@@ -21,8 +21,19 @@ This notebook calculates the following demographic variables.
 - v053, % 65 and Older
 - v057, % Female
 
+## Running this notebook
 
-# Import packages 
+Code in this notebook can be run top to bottom.
+Some aspects of execution can be controlled by setting parameter variables in the first configuration code chunk.
+
+Data are automatically downloaded, saved and uploaded, according to parameter settings:
+
+- `SAVE_MEASURES`: save R2026 measures to CSV files after calculation.
+- `SAVE_TO_S3`: upload a copy of raw data and calculated measures to S3 storage, requires credentials.
+- `READ_FROM_S3`: download raw data from S3 backup instead of original source.
+
+
+# Configuration and packages
 
 ```{r}
 library(tidyverse)
@@ -62,22 +73,13 @@ opath <- list(
 
 # Prepare data
 
-
-- Website to downloaded data
-
-`cc-est2024-agesex-all.csv`
-
-https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/
-
-- Online documentation
-
-https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2020-2024/CC-EST2024-AGESEX.pdf
+Raw source data for calculations are downloaded automatically from the US Census Bureau Population Estimates Prgoram [FTP website](https://www2.census.gov/programs-surveys/popest/datasets/).
+This notebook uses `Annual County and Puerto Rico Municipio Resident Population Estimates by Selected Age Groups and Sex: April 1, 2020 to July 1, 2024` table([CSV](https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/cc-est2024-agesex-all.csv), [documentation](https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2020-2024/CC-EST2024-AGESEX.pdf)).
 
 
 
-## import Census pop data
+## Download raw Census pop data
 
-data: https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/counties/asrh/cc-est2024-agesex-all.csv
 
 ```{r}
 
