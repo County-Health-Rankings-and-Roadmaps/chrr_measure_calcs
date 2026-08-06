@@ -73,8 +73,8 @@ opath <- list(
 
 # Prepare data
 
-Raw source data for calculations are downloaded automatically from the US Census Bureau Population Estimates Prgoram [FTP website](https://www2.census.gov/programs-surveys/popest/datasets/).
-This notebook uses `Annual County and Puerto Rico Municipio Resident Population Estimates by Selected Age Groups and Sex: April 1, 2020 to July 1, 2024` table([CSV](https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/cc-est2024-agesex-all.csv), [documentation](https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2020-2024/CC-EST2024-AGESEX.pdf)).
+Raw source data for calculations are downloaded automatically from the US Census Bureau Population Estimates Program [FTP website](https://www2.census.gov/programs-surveys/popest/datasets/).
+This notebook uses `Annual County and Puerto Rico Municipio Resident Population Estimates by Selected Age Groups and Sex: April 1, 2020 to July 1, 2024` table([CSV](https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/counties/asrh/cc-est2024-agesex-all.csv), [documentation](https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2020-2024/CC-EST2024-AGESEX.pdf)).
 
 
 
