@@ -4,9 +4,9 @@
 .Ruserdata
 raw_data/nchs/
 raw_data/MMG*
-scripts/v147*
-scripts/v127*
-scripts/v129*
+calculations/v147*
+calculations/v127*
+calculations/v129*
 temp/
 raw_data/HIFLD/googledrive
 data/
