@@ -40,7 +40,7 @@ POPEST_YEAR <- CHRR_YEAR - 2
 # set to FALSE to run calculations without saving measures to disk
 SAVE_MEASURES <- TRUE
 # upload raw and processed files to S3
-SAVE_TO_S3 <- TRUE
+SAVE_TO_S3 <- FALSE
 # read raw files from S3
 READ_FROM_S3 <- TRUE
 

@@ -8,8 +8,13 @@ library(tidyverse)
 # input paths
 ipath <- list(
   county_fips_with_ct_old = "inputs/county_fips_with_ct_old.sas7bdat",
-  state_fips = "inputs/state_fips.sas7bdat"
+  state_fips = "inputs/state_fips.sas7bdat",
+  s3_endpoint = "s3.wisc.edu",
+  s3_region =  "web",
+  s3_bucket = "countyhealthrankings",
+  s3_url = "https://{ipath$s3_region}.{ipath$s3_endpoint}/{ipath$s3_bucket}/{object_path}"
 )
+
 
 
 #' Configure write channels for the "logger" messages
@@ -41,6 +46,35 @@ mkdir <- function(p) {
 }
 
 
+#' Custom downloader function
+#' Attempts an alternative method if default download.file() fails
+download_file <- function(url, path) {
+  logger::log_info("Downloading {url} to {path}")
+  # Try stock download function first
+  # on Windows without mode = "wb", ZIP and XLSX files get corrupted
+  download_status <- try(utils::download.file(url, path, mode = "wb"))
+
+  # If download fails, try an alternative method
+  # download_status is not always reliable, can be 0 even if download filed
+  if (!file.exists(path)) {
+    logger::log_warn("Download failed, attempting alternative method ", url)
+    req <- httr2::request(url) |>
+      httr2::req_headers(
+        `User-Agent` = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:149.0) Gecko/20100101 Firefox/149.0",
+      )        
+    resp <- httr2::req_perform(req, path)
+  }
+
+  if (file.exists(path)) {
+    logger::log_info("Downloaded {path}")
+    return(path)
+  } else {
+    logger::log_error('Download failed.\nYou can try to manually download the file from "{url}" to "{path}"')
+    stop()
+  }
+
+}
+
 
 
 #' Return back given path, downloading file if it does not exist locally
@@ -60,31 +94,14 @@ get_file <- function(path, url, s3_read = FALSE, s3_write = FALSE) {
   mkdir(path)
 
   # attempt to download backup file from S3
-  if (s3_read && get_s3_file(path)) return(path)
+  if (s3_read && get_s3_file(path, public = TRUE)) return(path)
+  
+  download_file(url, path)
 
-  # Try stock download function first
-  # on Windows without mode = "wb", ZIP and XLSX files get corrupted
-  download_status <- try(utils::download.file(url, path, mode = "wb"))
-
-  # If download fails, try an alternative method
-  # if (download_status != 0) { # download_status is not always reliable, can be 0 even if download filed
-  if (!file.exists(path)) {
-    logger::log_warn("download failed, attempting alternative method... ", url)
-    req <- httr2::request(url) |>
-      httr2::req_headers(
-        `User-Agent` = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:149.0) Gecko/20100101 Firefox/149.0",
-      )        
-    resp <- httr2::req_perform(req, path)
-  }
-  if (file.exists(path)) {
-    logger::log_info("download success: ", url, " to ", path)
-    # write backup file to S3
-    if (s3_write) save_to_s3(path)
-    return(path)
-  } else {
-    logger::log_error('Download failed.\nYou can try to manually download the file from "{url}" to "{path}"')
-    stop()
-  }
+  # write backup file to S3
+  if (s3_write) save_to_s3(path)
+  
+  path
 }
 
 
@@ -104,43 +121,65 @@ save_to_file <- function(object, path) {
 
 #' Download file from S3
 #' Returns TRUE if file was successfully downloaded, otherwise FALSE
-get_s3_file <- function(path) {
-  if (any(Sys.getenv(c("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")) == "")) {
-    logger::log_error("AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY env variable not set, aborting S3 upload.")
-    return()
-  }
-  Sys.setenv(AWS_S3_ENDPOINT = "s3.wisc.edu", AWS_DEFAULT_REGION = "web")
-  bucket <- "countyhealthrankings"
-  
-  if (suppressMessages(aws.s3::object_exists(path, bucket))) {
-    if (file.exists(path)) logger::log_info("Overwriting local file ", path)
-    aws.s3::save_object(object = path, bucket = bucket, file = path, show_progress = TRUE)
-    if (file.exists(path)) {
-      logger::log_info("Downloaded S3 file ", path)
-      return(TRUE)
-    }
+#' If file is `public`, it will be downloaded from HTTP url
+#' Otherwise through authenticated S3 request
+get_s3_file <- function(path, public = FALSE) {
+
+  if (public) {
+    # publicly available file: download from HTTP url
+    url <- str_glue(ipath$s3_url, object_path = path)
+    download_file(url, path)
+    return(file.exists(path))
   } else {
-    logger::log_info("S3 file not found ", path)
+    # file not public, access with AWS credentials
+    if (any(Sys.getenv(c("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")) == "")) {
+      logger::log_error("AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY env variable not set, aborting S3 upload.")
+      return(FALSE)
+    }
+
+    # do not overwrite user space env vars
+    withr::with_envvar(
+      new = c("AWS_S3_ENDPOINT" = ipath$s3_endpoint, "AWS_DEFAULT_REGION" = ipath$s3_region),
+      {
+        if (suppressMessages(aws.s3::object_exists(path, ipath$s3_bucket))) {
+          if (file.exists(path)) logger::log_info("Overwriting local file ", path)
+          aws.s3::save_object(object = path, bucket = ipath$s3_bucket, file = path, show_progress = TRUE)
+          if (file.exists(path)) {
+            logger::log_info("Downloaded S3 file ", path)
+            return(TRUE)
+          }
+        } else {
+          logger::log_info("S3 file not found ", path)
+          return(FALSE)
+        }
+      }
+    )
   }
+
   FALSE
 }
 
 
 
 #' Upload file to S3
-save_to_s3 <- function(path, public = FALSE) {
+save_to_s3 <- function(path) {
   stopifnot(file.exists(path))
   if (any(Sys.getenv(c("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")) == "")) {
     logger::log_error("AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY env variable not set, aborting S3 upload.")
-    return()
+    stop()
   }
-  Sys.setenv(AWS_S3_ENDPOINT = "s3.wisc.edu", AWS_DEFAULT_REGION = "web")
-  bucket <- "countyhealthrankings"
-  
-  if (suppressMessages(aws.s3::object_exists(path, bucket))) logger::log_info("Overwriting S3 file ", path)
-  logger::log_info("Uploading to S3 file ", path)
-  aws.s3::put_object(object = path, file = path, bucket = bucket, acl = "public-read", show_progress = TRUE)
-  logger::log_info("Saved S3 file ", path)
+
+  # do not overwrite user space env vars
+  withr::with_envvar(
+    new = c("AWS_S3_ENDPOINT" = ipath$s3_endpoint, "AWS_DEFAULT_REGION" = ipath$s3_region),
+    {
+      if (suppressMessages(aws.s3::object_exists(path, ipath$s3_bucket))) logger::log_info("Overwriting S3 file ", path)
+      logger::log_info("Uploading to S3 file ", path)
+      aws.s3::put_object(object = path, file = path, bucket = ipath$s3_bucket, acl = "public-read", show_progress = TRUE)
+      logger::log_info("Saved S3 file ", path)
+    }
+  )
+
 }
 
 
