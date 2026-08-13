@@ -1,0 +1,276 @@
+---
+title: "v051, v052, v053, v057 - R2026"
+format:
+  html:
+    author: Anton Babkin
+    date: today
+    toc: true
+    toc-depth: 2
+    embed-resources: true
+    code-fold: true
+    code-overflow: wrap
+    df-print: kable
+---
+
+# About
+
+This notebook calculates the following demographic variables.
+
+- v051, Population
+- v052, % Below 18 Years of Age
+- v053, % 65 and Older
+- v057, % Female
+
+## Running this notebook
+
+Code in this notebook can be run top to bottom.
+Some aspects of execution can be controlled by setting parameter variables in the first configuration code chunk.
+
+Data are automatically downloaded, saved and uploaded, according to parameter settings:
+
+- `SAVE_MEASURES`: save R2026 measures to CSV files after calculation.
+- `SAVE_TO_S3`: upload a copy of raw data and calculated measures to S3 storage, requires credentials.
+- `READ_FROM_S3`: download raw data from S3 backup instead of original source.
+
+
+# Configuration and packages
+
+```{r}
+library(tidyverse)
+library(haven)
+
+source("calculations/helpers.R", local = (helpers <- new.env()))
+helpers$logger_config(stderr = TRUE, stdout = FALSE)
+
+# set CHRR_YEAR to 2026 for new r2026 calculations, to 2025 for comparison against old r2025 measures
+CHRR_YEAR <- 2026
+POPEST_YEAR <- CHRR_YEAR - 2
+
+# set to FALSE to run calculations without saving measures to disk
+SAVE_MEASURES <- TRUE
+# upload raw and processed files to S3
+SAVE_TO_S3 <- FALSE
+# read raw files from S3
+READ_FROM_S3 <- TRUE
+
+# calculated measures dataframes
+measures <- list()
+
+# input paths
+ipath <- list(
+  agesex_ = "https://www2.census.gov/programs-surveys/popest/datasets/2020-{POPEST_YEAR}/counties/asrh/cc-est{POPEST_YEAR}-agesex-all.csv",
+  r2025_measure_ = "measure_datasets/{vname}_r2025.csv"
+)
+
+# output paths
+opath <- list(
+  agesex_ = "raw_data/USCB/cc-est{POPEST_YEAR}-agesex-all.csv",
+  r2026_measure_ = "measure_datasets/{vname}_r2026.csv"
+)
+
+```
+
+
+# Prepare data
+
+Raw source data for calculations are downloaded automatically from the US Census Bureau Population Estimates Program [FTP website](https://www2.census.gov/programs-surveys/popest/datasets/).
+This notebook uses `Annual County and Puerto Rico Municipio Resident Population Estimates by Selected Age Groups and Sex: April 1, 2020 to July 1, 2024` table([CSV](https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/counties/asrh/cc-est2024-agesex-all.csv), [documentation](https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2020-2024/CC-EST2024-AGESEX.pdf)).
+
+
+
+## Download raw Census pop data
+
+
+```{r}
+
+raw_file <- helpers$get_file(
+  path = str_glue(opath$agesex_), 
+  url = str_glue(ipath$agesex_),
+  s3_read = READ_FROM_S3,
+  s3_write = SAVE_TO_S3
+)
+
+df_raw <- read_csv(raw_file) %>%
+  rename_with(tolower)
+
+df_raw %>%
+  head()
+
+```
+
+
+## process data
+
+POPESTIMATE: Total population
+POPEST_FEM: Female population
+AGE18PLUS_TOT: Total population age 18 years and over
+AGE65PLUS_TOT: Total population age 65 years and over
+
+```{r}
+df_proc <- list()
+
+pop_vars <- c("popestimate", "popest_fem", "age18plus_tot", "age65plus_tot")
+
+year_code <- switch(
+  as.character(POPEST_YEAR), 
+  `2023` = 5, # 7/1/2023 population estimate
+  `2024` = 6  # 7/1/2024 population estimate
+)
+
+df_proc$county <- df_raw %>% 
+  filter(year == year_code) %>%  
+  select(sumlev, state, county, all_of(pop_vars))
+
+df_proc$state <- df_proc$county %>%
+  summarize(
+    across(all_of(pop_vars), \(x) sum(x, na.rm = TRUE)),
+    .by = "state"
+  ) %>%
+  mutate(sumlev = "040", county = "000")
+
+df_proc$us <- df_proc$state %>%
+  summarize(
+    across(all_of(pop_vars), \(x) sum(x, na.rm = TRUE))
+  ) %>%
+  mutate(sumlev = "010", state = "00", county = "000") 
+
+df_proc <- df_proc %>%
+  bind_rows() %>%
+  arrange(state, county) %>%
+  # construct partial UCGID (GEOID) to work with standardize_fips()
+  mutate(ucgid = paste0(sumlev, "------", state, county), .before = 1) %>%
+  helpers$standardize_fips() %>%
+  select(statecode, countycode, all_of(pop_vars)) %>%
+  helpers$add_flag_CT(old = "U", new = "A")
+
+skimr::skim(df_proc)
+
+```
+
+# Calculate measures
+
+## v051 - Population
+
+```{r}
+vname <- "v051"
+measures[[vname]] <- df_proc %>%
+  mutate(rawvalue = popestimate) %>%
+  select(statecode, countycode, rawvalue, flag_CT) %>%
+  helpers$add_col_prefix(vname)
+
+skimr::skim(measures[[vname]])
+
+if (SAVE_MEASURES && CHRR_YEAR == 2026) {
+  save_to <- str_glue(opath$r2026_measure_)
+  helpers$save_to_file(measures[[vname]], save_to)
+  if (SAVE_TO_S3) helpers$save_to_s3(save_to)
+}
+
+if (CHRR_YEAR == 2025) {
+  x0 <- str_glue(ipath$r2025_measure_) %>%
+    read_csv(show_col_types = FALSE) %>%
+    arrange(statecode, countycode)
+  x1 <- measures[[vname]]
+  waldo::compare(x0, x1, tolerance = 1e-4, list_as_map = TRUE)
+}
+
+```
+
+
+## v052 - % Below 18 Years of Age
+
+```{r}
+vname <- "v052"
+measures[[vname]] <- df_proc %>%
+  mutate(
+    numerator = popestimate - age18plus_tot,
+    denominator = popestimate,
+    rawvalue = numerator / denominator
+    ) %>%
+  select(statecode, countycode, rawvalue, numerator, denominator, flag_CT) %>%
+  helpers$add_col_prefix(vname)
+
+skimr::skim(measures[[vname]])
+
+if (SAVE_MEASURES && CHRR_YEAR == 2026) {
+  save_to <- str_glue(opath$r2026_measure_)
+  helpers$save_to_file(measures[[vname]], save_to)
+  if (SAVE_TO_S3) helpers$save_to_s3(save_to)
+}
+
+if (CHRR_YEAR == 2025) {
+  x0 <- str_glue(ipath$r2025_measure_) %>%
+    read_csv(show_col_types = FALSE) %>%
+    arrange(statecode, countycode)
+  x1 <- measures[[vname]]
+  waldo::compare(x0, x1, tolerance = 1e-4, list_as_map = TRUE)
+}
+
+```
+
+
+## v053 - % 65 and Older
+
+```{r}
+vname <- "v053"
+measures[[vname]] <- df_proc %>%
+  mutate(
+    numerator = age65plus_tot,
+    denominator = popestimate,
+    rawvalue = numerator / denominator
+    ) %>%
+  select(statecode, countycode, rawvalue, numerator, denominator, flag_CT) %>%
+  helpers$add_col_prefix(vname)
+
+skimr::skim(measures[[vname]])
+
+if (SAVE_MEASURES && CHRR_YEAR == 2026) {
+  save_to <- str_glue(opath$r2026_measure_)
+  helpers$save_to_file(measures[[vname]], save_to)
+  if (SAVE_TO_S3) helpers$save_to_s3(save_to)
+}
+
+if (CHRR_YEAR == 2025) {
+  x0 <- str_glue(ipath$r2025_measure_) %>%
+    read_csv(show_col_types = FALSE) %>%
+    arrange(statecode, countycode)
+  x1 <- measures[[vname]]
+  waldo::compare(x0, x1, tolerance = 1e-4, list_as_map = TRUE)
+}
+
+```
+
+
+## v057 - % Female
+
+```{r}
+vname <- "v057"
+measures[[vname]] <- df_proc %>%
+  mutate(
+    numerator = popest_fem,
+    denominator = popestimate,
+    rawvalue = numerator / denominator
+    ) %>%
+  select(statecode, countycode, rawvalue, numerator, denominator, flag_CT) %>%
+  helpers$add_col_prefix(vname)
+
+
+skimr::skim(measures[[vname]])
+
+if (SAVE_MEASURES && CHRR_YEAR == 2026) {
+  save_to <- str_glue(opath$r2026_measure_)
+  helpers$save_to_file(measures[[vname]], save_to)
+  if (SAVE_TO_S3) helpers$save_to_s3(save_to)
+}
+
+if (CHRR_YEAR == 2025) {
+  x0 <- str_glue(ipath$r2025_measure_) %>%
+    read_csv(show_col_types = FALSE) %>%
+    arrange(statecode, countycode)
+  x1 <- measures[[vname]]
+  waldo::compare(x0, x1, tolerance = 1e-4, list_as_map = TRUE)
+}
+
+```
+
+

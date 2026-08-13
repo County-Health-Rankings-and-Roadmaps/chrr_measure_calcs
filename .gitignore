@@ -11,16 +11,17 @@ temp/
 raw_data/HIFLD/googledrive
 data/
 
-# binary raw data
+# raw data
 raw_data/ACS/*.pq
 raw_data/ACS/2023/*.pq
 raw_data/ACS/2024/*.pq
 raw_data/CHAS/*-csv.zip
+raw_data/USCB/cc-est2024*.csv
 
 # R configuration and environment
 .Rprofile
 renv/
-.positai/
+.posit/
 
 # environment file with secrets
 .Renviron
