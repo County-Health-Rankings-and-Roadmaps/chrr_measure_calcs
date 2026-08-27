@@ -1,0 +1,427 @@
+---
+title: "v167"
+output: html_document
+date: "2025-02-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(haven)
+
+data_out_path <- "../01_data/processed"
+
+data_dir_2025 <- 'C:/01_CHRR/data/r2025'
+```
+
+
+# About v167 (School segregation)
+
+The extent to which students of different race/ethnic groups are unevenly distributed across schools when compared with the racial and ethnic composition of the local population. The index ranges from 0 to 1 where a value of zero indicates a school population that directly reflects the community population, while a higher value indicates greater levels of school segregation.
+
+# standard FIPS
+
+```{r}
+fips <- bind_rows(
+  read_sas(file.path(data_dir_2025, "county_fips.sas7bdat") ),
+  read_sas(file.path(data_dir_2025, "state_fips.sas7bdat")))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+# with old CT counties
+fips_all <- bind_rows(
+  fips, 
+  read_sas(file.path(data_dir_2025, "county_fips_old.sas7bdat") ) %>% 
+    filter(statecode == "09")) %>% 
+  arrange(statecode, countycode)
+```
+
+# helpers
+
+```{r}
+calc_proportations <- function(df){
+  res <- df %>% 
+    mutate(aian_prop = aian/total_students, 
+           asian_prop = asian/total_students,
+           hisp_prop = hisp/total_students, 
+           black_prop = black/total_students,
+           white_prop = white/total_students, 
+           two_prop = two/total_students)
+  
+  return(res)
+}
+
+calc_theil <- function(df){
+  res <- df %>% 
+    mutate(theil = -(    aian_prop  * log(ifelse(aian_prop==0,  1, aian_prop)) 
+                       + asian_prop * log(ifelse(asian_prop==0, 1, asian_prop)) 
+                       + hisp_prop  * log(ifelse(hisp_prop==0,  1, hisp_prop)) 
+                       + black_prop * log(ifelse(black_prop==0, 1, black_prop)) 
+                       + white_prop * log(ifelse(white_prop==0, 1, white_prop))
+                       + two_prop   * log(ifelse(two_prop==0,   1, two_prop))
+                       )
+         )
+  
+  return(res$theil)
+}
+
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+```
+
+
+# Import NCES data
+
+-   The actual data starts from line 7 in the raw data set (csv); so set skip = 6 
+
+```{r }
+df_nces <- read_csv(
+  here::here(data_dir_2025, "raw/nces/school_segregation/ELSI_csv_export_6387151618792713067141.csv"),
+  skip = 6,
+  n_max = Inf) %>% 
+  janitor::clean_names() %>% 
+  filter(!is.na(state_name_public_school_latest_available_year)) %>%
+  glimpse()
+
+```
+
+```{r}
+df_nces %>% head()
+```
+
+# clean column names
+
+```{r}
+df_nces_clean_name <- df_nces %>% 
+  # remove school_name column, which is the same as column 3
+  select(-school_name) %>% 
+  rename_at(
+    # select all variables with "_public_school_2023_24" in the name
+    vars(contains("_public_school_2023_24")),
+    # use stringr::str_replace to remove _public_school_2023_24
+    list(~str_replace(., "_public_school_2023_24", ""))) %>% 
+  rename(state = state_name_public_school_latest_available_year,
+         fipscode = county_number,
+         total_students = total_students_all_grades_excludes_ae,
+         aian = american_indian_alaska_native_students,
+         asian = asian_or_asian_pacific_islander_students,
+         hisp = hispanic_students,
+         black = black_or_african_american_students,
+         white = white_students,
+         nhop = nat_hawaiian_or_other_pacific_isl_students,
+         two = two_or_more_races_students) %>% 
+  # convert state names to upper case
+  mutate(state = str_to_upper(state),
+         school_name = str_to_upper(school_name)) %>% 
+  glimpse()
+```
+
+# explore columns
+
+-   school_type
+
+```{r}
+df_nces_clean_name %>% 
+  select(school_type) %>% 
+  distinct()
+
+```
+
+- start_of_year_status
+
+```{r}
+df_nces_clean_name %>% 
+  select(start_of_year_status) %>% 
+  distinct()
+```
+
+```{r}
+df_nces_clean_name %>% 
+  count(start_of_year_status)
+  # filter(start_of_year_status == '6-Inactive') 
+```
+
+-   total_students
+
+```{r}
+df_nces_clean_name %>% 
+  select(total_students) %>% 
+  filter(str_detect(total_students, "\\D+|(^0$)")) %>% 
+  group_by(total_students) %>% 
+  count() %>% 
+  ungroup() %>% 
+  janitor::adorn_totals("row")
+```
+
+-   There are 4348 schools with `total_students` being missing or 0; these schools will be excluded 
+
+# 1. The following school types are excluded
+
+```{r}
+df_nces_clean_name %>% 
+  distinct(school_type)
+
+df_nces_clean_name %>% 
+  distinct(start_of_year_status)
+```
+
+
+-   if `school_name` contains 'JUVENILE|JAIL|PRISON|CORRECTIONAL|CYBER|VIRTUAL' then delete;
+-   if `School_Type` == `4-Alternative Education School`, then delete;
+-   if `Start_of_Year_Status` == '6-Inactive', then delete;
+-   if `Start_of_Year_Status` == '2-Closed', then delete;
+-   if `total_students` is missing or 0, then delete
+
+```{r}
+df1 <- df_nces_clean_name %>%
+  filter(!str_detect(school_name,
+                     'JUVENILE|JAIL|PRISON|CORRECTIONAL|CYBER|VIRTUAL')) %>%
+  filter(school_type != "4-Alternative Education School") %>%
+  filter(start_of_year_status != '6-Inactive') %>%
+  filter(start_of_year_status != '2-Closed') %>%
+  # filter(start_of_year_status != '7-Future') %>%
+  filter(!str_detect(total_students, "\\D+")) %>%  # total_students not 0
+  glimpse()
+```
+
+# 2. Create proportions for each race/ethnicity category
+
+## clean columns and convert to numeric
+
+```{r}
+grps_lst <- c("total_students", "aian", "asian", "hisp", "black", "white", "nhop", "two")
+
+df2a <- df1 %>% 
+  mutate(fipscode = str_extract(fipscode, "\\d+")) %>% 
+  # get statecode and countycode from fipscode
+  mutate(statecode = str_sub(fipscode, 1L, 2L),
+         countycode = str_sub(fipscode, 3L, 5L), .after = 'fipscode') %>% 
+  mutate(across(all_of(grps_lst),  ~ str_extract(., "\\d+")) ) %>%
+  mutate(across(all_of(grps_lst), as.numeric) ) %>%
+  mutate(across(all_of(grps_lst), ~ if_else(is.na(.), 0, .)) ) %>%
+  mutate(asian = asian + nhop) %>% 
+  select(-c(school_name,county_name, school_type, start_of_year_status, nhop)) %>% 
+  filter(total_students > 0) %>% # remove schools with 0 total students
+  glimpse()
+```
+
+```{r}
+df2a %>% 
+  filter(fipscode == "12065")
+```
+
+## calculate proportions
+
+```{r}
+df2 <- df2a %>% 
+  calc_proportations() %>% 
+  glimpse()
+
+```
+
+# 3. Calculate a theil value for each school
+
+theil_school = -(amer_ind_prop*log(amer_ind_prop)+asian_pi_haw_prop*log(asian_pi_haw_prop)+
+hispanic_prop*log(hispanic_prop)+black_prop*log(black_prop)+white_prop*log(white_prop)+two_prop*log(two_prop))
+
+$$theil_{school} = -(aian_{prop}*log(aian_{prop})+asian_{prop}*log(asian_{prop})+
+hisp_{prop}*log(hisp_{prop})+black_{prop}*log(black_{prop})+white_{prop}*log(white_{prop})+two_{prop}*log(two_{prop}))$$
+
+```{r}
+df3 <- df2 %>% 
+  mutate(theil_school = calc_theil(.)) %>%
+  glimpse()
+```
+
+# 4. Calculate a theil value for each county
+
+-   `theil_county` = aggregate school values for each race/ethnicity category and complete the same calculation as above for theil_school
+
+```{r}
+df4 <- df2a %>% 
+  group_by(fipscode) %>% 
+  mutate(across(all_of(grps_lst[grps_lst!='nhop']), sum) ) %>% 
+  mutate(school_num = n()) %>%
+  distinct(fipscode, .keep_all=TRUE) %>% 
+  ungroup() %>% 
+  calc_proportations() %>% 
+  mutate(theil_county = calc_theil(.)) %>%
+  mutate(flag = (aian>=25) + (asian>=25) + (hisp>=25) + (black>=25) + (white>=25)+
+           (two>=25) 
+         ) %>% 
+  glimpse()
+
+```
+
+# 5.Calculate school_weight, theil_school_weight, theil_count_weight
+
+`school_weight` = Total_students_in_school/Total_students_in_county
+`theil_school_weight` = theil_school*school_weight
+`theil_county_weight` = aggregating the theil_school_weight for each county
+
+```{r}
+df5 <- df3 %>% 
+  group_by(fipscode) %>% 
+  mutate(total_students_cny = sum(total_students, na.rm = TRUE),
+         school_weight = total_students/total_students_cny,
+         theil_school_weight = theil_school * school_weight
+         ) %>% 
+  summarise(theil_county_weight = sum(theil_school_weight, na.rm = TRUE)) %>% 
+  glimpse()
+```
+
+# 6. Create final theil value for each county
+
+`theil_county_final` = abs(`theil_county` - `theil_county_weight`)/`theil_county`
+
+```{r}
+df6 <- df4 %>% 
+  select(state, fipscode, statecode, countycode, theil_county, flag, school_num) %>% 
+  left_join(df5, by = "fipscode") %>% 
+  mutate(theil_county_final = abs(theil_county - theil_county_weight)/theil_county) %>% 
+  # suppress counties with only one group that has >25 students
+  mutate(theil_county_final = if_else(flag < 2, NA_real_, theil_county_final)) %>% 
+  # suppress counties with only one school
+  mutate(theil_county_final = if_else(school_num < 2, NA_real_, theil_county_final)) %>% 
+  glimpse()
+
+```
+
+## check CT: new counties (i.e., palnning regions)
+
+```{r}
+df6 %>% 
+  filter(statecode == "09")
+```
+
+# 7. Calculate a theil value for each state
+
+`theil_state` = aggregate county values for each race/ethnicity category and complete the same calculation as for theil_county
+
+```{r}
+df7 <- df2a %>% 
+  select(-c(fipscode)) %>% 
+  group_by(state) %>% 
+  mutate(across(all_of(grps_lst[grps_lst!='nhop']), sum) ) %>%
+  distinct(state, .keep_all=TRUE) %>% 
+  ungroup() %>%
+  calc_proportations() %>% 
+  mutate(theil_state = calc_theil(.)) %>%
+  glimpse()
+```
+
+# 8.Calculate county_weight, theil_county_weight, theil_state_weight
+
+```{r}
+# use theil_school
+glimpse(df3)
+df8 <- df3 %>% 
+  select(state, statecode, countycode, total_students, aian, asian, hisp, 
+         black, white, two, theil_school) %>% 
+  group_by(state) %>% 
+  mutate(total_students_st = sum(total_students, na.rm = TRUE),
+         school_weight = total_students/total_students_st,
+         theil_county_weight = theil_school * school_weight
+  ) %>% 
+  summarise(theil_state_weight = sum(theil_county_weight, na.rm = TRUE), 
+            statecode = first(statecode)) %>% 
+  mutate(countycode = '000') %>% 
+  glimpse()
+```
+
+# 9. Create the final theil value for each state
+
+`theil_state_final` = abs(theil_state-theil_state_weight)/theil_state
+
+```{r}
+df9 <- df7 %>% 
+  select(state, theil_state) %>% 
+  left_join(df8, by = "state") %>% 
+  mutate(theil_state_final = abs(theil_state - theil_state_weight)/theil_state) %>% 
+  select(state, statecode, countycode, everything()) %>% 
+  glimpse()
+```
+
+# Combine county and state data
+
+```{r}
+df12 <- bind_rows(
+  df6 %>% ungroup() %>% 
+    select(statecode, countycode, v167_rawvalue = theil_county_final),
+  df9 %>% ungroup() %>%
+    select(statecode, countycode, v167_rawvalue = theil_state_final)
+  ) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+### add us value as median of state values
+
+```{r}
+us_rawvalue <- df12 %>% 
+  filter(countycode == "000") %>% 
+  summarise(median(v167_rawvalue)) %>% 
+  pull()
+
+us_rawvalue
+```
+
+```{r}
+df12b <- df12 %>% 
+  add_row(statecode = "00", countycode = "000", v167_rawvalue = us_rawvalue) %>% 
+  arrange(statecode, countycode)
+```
+
+
+```{r}
+v167_gl <- fips_all %>% 
+  left_join(df12b, by = c('statecode', 'countycode')) %>% 
+  mutate(v167_numerator = NA_real_, v167_denominator = NA_real_, 
+         v167_cilow = NA_real_, v167_cihigh = NA_real_,
+         v167_sourceflag = NA_real_) %>% 
+  select(-c(fipscode, state, county)) %>% 
+  glimpse()
+```
+
+## explore
+
+```{r}
+summary(v167_gl)
+```
+
+# add flag_CT
+
+```{r}
+v167_gl_2 <- v167_gl %>% 
+  add_flag_CT(vnum = "v167", old="U", new = "A")
+
+v167_gl_2
+```
+
+# save data
+
+```{r eval=FALSE}
+write_csv(v167_gl_2,
+  paste0(
+    data_out_path, "/",
+    "v167_r2025", 
+    "_",  format(Sys.Date(), "%Y_%m_%d"),
+    ".csv"
+  ),
+  na = ""
+)
+```
