@@ -1,5 +1,5 @@
 ---
-title: "NCHS v161 Suicide - R2026"
+title: "NCHS v161 Suicide - R2027"
 output: html_document
 ---
 
@@ -23,11 +23,9 @@ The denominator is the aggregate county population over the five-year period.
 
 ## Raw data access
 
-- NCHS mortality and natality data 2019-2023: the data is requested
+- NCHS mortality and natality data 2020-2024: the data is requested
 
-- Census population estimates 2019-2023 from:
-
-2019 Census Population Estimates: https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/asrh/cc-est2019-alldata.csv
+- Census population estimates 2020-2024 from:
 
 2020 Census Population Estimates: https://www2.census.gov/programs-surveys/popest/datasets/2010-2020/counties/asrh/CC-EST2020-ALLDATA.csv
 
@@ -36,6 +34,10 @@ The denominator is the aggregate county population over the five-year period.
 2022 Census Population Estimates: https://www2.census.gov/programs-surveys/popest/datasets/2020-2022/counties/asrh/cc-est2022-all.csv
 
 2023 Census Population Estimates: https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/asrh/cc-est2023-alldata.csv
+
+2024 Census Population Estimates: 
+https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/counties/asrh/cc-est2024-alldata.csv
+
 
 # import packages
 
@@ -118,28 +120,29 @@ process_mort_v161 <- function(year, by_race_TF = FALSE, icd_v161 = NULL){
 - The NCHS birth data was aggregated by state, county, age category, and race/ethnicity group.
 
 ```{r}
-yrs <- c(2019:2023)
+yrs <- c(2020:2024)
 
 infant_pop <- 
   get_infant_pop(
     yrs, 
-    file.path(nchs_nata_dir, "nchs_births_2017_2023.csv"), 
+    file.path(nchs_nata_dir, "nchs_births_2018_2024.csv"), 
     by_race = FALSE) %>% 
   glimpse()
 
 infant_pop
 ```
 
-## Census pop data 2019-2023 by age cat 1-10
+## Census pop data 2020-2024 by age cat 1-10
 
 ```{r}
 pop_agecat_1_10 <- bind_rows(
-  process_pop_v161(2019),
   process_pop_v161(2020),
   process_pop_v161(2021),
   process_pop_v161(2022) %>% 
     fix_CT_pop(process_pop_v161(2021)),
   process_pop_v161(2023) %>% 
+    fix_CT_pop(process_pop_v161(2021)),
+  process_pop_v161(2024) %>% 
     fix_CT_pop(process_pop_v161(2021))
   ) %>% 
   group_by(statecode, countycode, age_cat) %>% 
@@ -211,15 +214,15 @@ icd_code_lst <- c('X60', 'X61', 'X62', 'X63', 'X64', 'X65', 'X66', 'X67', 'X68',
 
 ```
 
-## mort 2019-2023
+## mort 2020-2024
 
 ```{r}
 mort_all <- bind_rows(
-  process_mort_v161(2019, icd_v161 = icd_code_lst),
   process_mort_v161(2020, icd_v161 = icd_code_lst),
   process_mort_v161(2021, icd_v161 = icd_code_lst),
   process_mort_v161(2022, icd_v161 = icd_code_lst),
   process_mort_v161(2023, icd_v161 = icd_code_lst), 
+  process_mort_v161(2024, icd_v161 = icd_code_lst), 
   ) %>% 
   group_by(statecode, countycode, age_cat) %>% 
   summarise(deaths = sum(deaths), .groups = "drop") %>% 
@@ -322,7 +325,7 @@ v161_3 <- v161_2 %>%
 # compare initial and duplicated calculations
 
 ```{r}
-compare("v161", v161_3, 2026)
+compare("v161", v161_3, 2027)
 ```
 
 
