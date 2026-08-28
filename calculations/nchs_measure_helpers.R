@@ -30,6 +30,7 @@ list_census_pop_csv <- function(zipped = TRUE) {
   
   df <- tribble(
     ~year, ~file_name, ~year_num,
+    2024, glue("cc-est2024-alldata{file_extension}"), 6,
     2023, glue("cc-est2023-alldata{file_extension}"), 5,
     2022, glue("cc-est2022-all{file_extension}"),     4,
     2021, glue("cc-est2021-all{file_extension}"),     3,
@@ -1617,7 +1618,7 @@ update_mort_us_from_state <- function(df_mort_all){
 
 ### function: calculate CT counties from CT mortality data, subgroups
 
-get_CT_from_CT_mort_sub61 <- function(df, year_lst = 2016:2022, icd_code_lst=NULL){
+get_CT_from_CT_mort_sub61 <- function(df, year_lst = 2018:2024, icd_code_lst=NULL){
   
   df_2 <- df %>% 
     filter(state == "CT") %>% 
@@ -1708,7 +1709,7 @@ update_mort_us_from_state_sub61 <- function(df_mort_all){
 # function: save calculated data as a csv file
 save_data <- function(df, vnum, output_dir = "../measure_datasets/") {
   # Construct the filename. Use paste0 for efficiency.
-  filename <- glue("{output_dir}{vnum}_r2025.csv")
+  filename <- glue("{output_dir}{vnum}_r2027.csv")
   
   # Write the CSV file with error handling.  Use tryCatch for robust error management.
   tryCatch({
@@ -1742,7 +1743,7 @@ save_data <- function(df, vnum, output_dir = "../measure_datasets/") {
 #'
 #' @return A data frame of rows with differences greater than 0.001 in any component
 #' @examples
-#' compare("v001", v001, 2026)
+#' compare("v001", v001, 2027)
 
 compare <- function(measure_num, duplicated_data, year) {
   library(dplyr)
@@ -1824,7 +1825,7 @@ compare <- function(measure_num, duplicated_data, year) {
 #'
 #' @return A data frame of rows with differences greater than 0.001 in any component
 #' @examples
-#' compare_subgroup("v001", v001, 2026)
+#' compare_subgroup("v001", v001, 2027)
 
 compare_subgroup <- function(measure_num, duplicated_data, year) {
   library(dplyr)
